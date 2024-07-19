@@ -2,7 +2,7 @@
 [English](README.md) | *日本語*
 
 
-sd-merger はLLMをベクトルマージするための小さなツールです。
+sd-merger はSDをベクトルマージするための小さなツールです。
 
 
 ## インストール
