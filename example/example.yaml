@@ -1,0 +1,14 @@
+# SDのモデルパスにはsafetensorsは末尾につけないでください（自動で指定されます）
+target_model: "主とするモデル"
+models:
+  - left: "モデル1"
+    right: "モデル2"
+    velocity: 1.0
+      # 強さ(計算に使います)
+    strategy: "subtraction" # subtraceion, addition, multiplication, average, replace
+      # 計算式
+    key_patterns:
+      # - "conditioner."
+      # - ".input_blocks."
+      # キーがわからない場合はkeyを指定しなければキー一覧が出力されます
+      # ここで指定した場合、そのキーをマージします。
