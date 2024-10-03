@@ -1,0 +1,530 @@
+[
+    {
+        "label": "logging",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "logging",
+        "description": "logging",
+        "detail": "logging",
+        "documentation": {}
+    },
+    {
+        "label": "Dict",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Iterable",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Callable",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Dict",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Iterable",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Any",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Dict",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Any",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "Dict",
+        "importPath": "typing",
+        "description": "typing",
+        "isExtraImport": true,
+        "detail": "typing",
+        "documentation": {}
+    },
+    {
+        "label": "ABC",
+        "importPath": "abc",
+        "description": "abc",
+        "isExtraImport": true,
+        "detail": "abc",
+        "documentation": {}
+    },
+    {
+        "label": "abstractmethod",
+        "importPath": "abc",
+        "description": "abc",
+        "isExtraImport": true,
+        "detail": "abc",
+        "documentation": {}
+    },
+    {
+        "label": "ABC",
+        "importPath": "abc",
+        "description": "abc",
+        "isExtraImport": true,
+        "detail": "abc",
+        "documentation": {}
+    },
+    {
+        "label": "abstractmethod",
+        "importPath": "abc",
+        "description": "abc",
+        "isExtraImport": true,
+        "detail": "abc",
+        "documentation": {}
+    },
+    {
+        "label": "torch",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "torch",
+        "description": "torch",
+        "detail": "torch",
+        "documentation": {}
+    },
+    {
+        "label": "CalculationStrategy",
+        "importPath": "module.calc_metod",
+        "description": "module.calc_metod",
+        "isExtraImport": true,
+        "detail": "module.calc_metod",
+        "documentation": {}
+    },
+    {
+        "label": "get_calculation_strategy",
+        "importPath": "module.calc_metod",
+        "description": "module.calc_metod",
+        "isExtraImport": true,
+        "detail": "module.calc_metod",
+        "documentation": {}
+    },
+    {
+        "label": "datetime",
+        "importPath": "datetime",
+        "description": "datetime",
+        "isExtraImport": true,
+        "detail": "datetime",
+        "documentation": {}
+    },
+    {
+        "label": "load_file",
+        "importPath": "safetensors.torch",
+        "description": "safetensors.torch",
+        "isExtraImport": true,
+        "detail": "safetensors.torch",
+        "documentation": {}
+    },
+    {
+        "label": "save_file",
+        "importPath": "safetensors.torch",
+        "description": "safetensors.torch",
+        "isExtraImport": true,
+        "detail": "safetensors.torch",
+        "documentation": {}
+    },
+    {
+        "label": "Console",
+        "importPath": "rich.console",
+        "description": "rich.console",
+        "isExtraImport": true,
+        "detail": "rich.console",
+        "documentation": {}
+    },
+    {
+        "label": "Console",
+        "importPath": "rich.console",
+        "description": "rich.console",
+        "isExtraImport": true,
+        "detail": "rich.console",
+        "documentation": {}
+    },
+    {
+        "label": "yaml",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "yaml",
+        "description": "yaml",
+        "detail": "yaml",
+        "documentation": {}
+    },
+    {
+        "label": "SDKeyWrapper",
+        "importPath": "module.const",
+        "description": "module.const",
+        "isExtraImport": true,
+        "detail": "module.const",
+        "documentation": {}
+    },
+    {
+        "label": "SDKeyWrapper",
+        "importPath": "module.const",
+        "description": "module.const",
+        "isExtraImport": true,
+        "detail": "module.const",
+        "documentation": {}
+    },
+    {
+        "label": "os",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "os",
+        "description": "os",
+        "detail": "os",
+        "documentation": {}
+    },
+    {
+        "label": "RichHandler",
+        "importPath": "rich.logging",
+        "description": "rich.logging",
+        "isExtraImport": true,
+        "detail": "rich.logging",
+        "documentation": {}
+    },
+    {
+        "label": "Progress",
+        "importPath": "rich.progress",
+        "description": "rich.progress",
+        "isExtraImport": true,
+        "detail": "rich.progress",
+        "documentation": {}
+    },
+    {
+        "label": "argparse",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "argparse",
+        "description": "argparse",
+        "detail": "argparse",
+        "documentation": {}
+    },
+    {
+        "label": "get_normalization_calculation_strategy",
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "isExtraImport": true,
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "get_target_calculation_strategy",
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "isExtraImport": true,
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "generate_filename",
+        "importPath": "module.utility",
+        "description": "module.utility",
+        "isExtraImport": true,
+        "detail": "module.utility",
+        "documentation": {}
+    },
+    {
+        "label": "load_model",
+        "importPath": "module.utility",
+        "description": "module.utility",
+        "isExtraImport": true,
+        "detail": "module.utility",
+        "documentation": {}
+    },
+    {
+        "label": "load_yaml_config",
+        "importPath": "module.utility",
+        "description": "module.utility",
+        "isExtraImport": true,
+        "detail": "module.utility",
+        "documentation": {}
+    },
+    {
+        "label": "save_model",
+        "importPath": "module.utility",
+        "description": "module.utility",
+        "isExtraImport": true,
+        "detail": "module.utility",
+        "documentation": {}
+    },
+    {
+        "label": "CalculationStrategy",
+        "kind": 6,
+        "importPath": "module.calc_metod",
+        "description": "module.calc_metod",
+        "peekOfCode": "class CalculationStrategy(ABC):\n    @abstractmethod\n    def calculate(\n        self,\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],\n    ) -> Dict[str, torch.Tensor]:\n        pass",
+        "detail": "module.calc_metod",
+        "documentation": {}
+    },
+    {
+        "label": "SubtractionStrategy",
+        "kind": 6,
+        "importPath": "module.calc_metod",
+        "description": "module.calc_metod",
+        "peekOfCode": "class SubtractionStrategy(CalculationStrategy):\n    def calculate(\n        self,\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],\n    ) -> Dict[str, torch.Tensor]:\n        model_diff = {}\n        common_keys = set(left_model.keys()) & set(right_model.keys())",
+        "detail": "module.calc_metod",
+        "documentation": {}
+    },
+    {
+        "label": "AdditionStrategy",
+        "kind": 6,
+        "importPath": "module.calc_metod",
+        "description": "module.calc_metod",
+        "peekOfCode": "class AdditionStrategy(CalculationStrategy):\n    def calculate(\n        self,\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],\n    ) -> Dict[str, torch.Tensor]:\n        model_diff = {}\n        for key in left_model.keys():",
+        "detail": "module.calc_metod",
+        "documentation": {}
+    },
+    {
+        "label": "MultiplicationStrategy",
+        "kind": 6,
+        "importPath": "module.calc_metod",
+        "description": "module.calc_metod",
+        "peekOfCode": "class MultiplicationStrategy(CalculationStrategy):\n    def calculate(\n        self,\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],\n    ) -> Dict[str, torch.Tensor]:\n        model_diff = {}\n        for key in left_model.keys():",
+        "detail": "module.calc_metod",
+        "documentation": {}
+    },
+    {
+        "label": "AverageStrategy",
+        "kind": 6,
+        "importPath": "module.calc_metod",
+        "description": "module.calc_metod",
+        "peekOfCode": "class AverageStrategy(CalculationStrategy):\n    def calculate(\n        self,\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],\n    ) -> Dict[str, torch.Tensor]:\n        model_diff = {}\n        for key in left_model.keys():",
+        "detail": "module.calc_metod",
+        "documentation": {}
+    },
+    {
+        "label": "MixStrategy",
+        "kind": 6,
+        "importPath": "module.calc_metod",
+        "description": "module.calc_metod",
+        "peekOfCode": "class MixStrategy(CalculationStrategy):\n    def calculate(\n        self,\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],\n    ) -> Dict[str, torch.Tensor]:\n        model_diff = {}\n        for key in left_model.keys():",
+        "detail": "module.calc_metod",
+        "documentation": {}
+    },
+    {
+        "label": "ReplaceStrategy",
+        "kind": 6,
+        "importPath": "module.calc_metod",
+        "description": "module.calc_metod",
+        "peekOfCode": "class ReplaceStrategy(CalculationStrategy):\n    def __init__(self, replace_with: str):\n        self.replace_with = replace_with\n    def calculate(\n        self,\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],\n    ) -> Dict[str, torch.Tensor]:",
+        "detail": "module.calc_metod",
+        "documentation": {}
+    },
+    {
+        "label": "get_calculation_strategy",
+        "kind": 2,
+        "importPath": "module.calc_metod",
+        "description": "module.calc_metod",
+        "peekOfCode": "def get_calculation_strategy(\n    strategy_name: str, replace_with: str = None\n) -> CalculationStrategy:\n    if strategy_name == \"subtraction\":\n        return SubtractionStrategy()\n    elif strategy_name == \"addition\":\n        return AdditionStrategy()\n    elif strategy_name == \"multiplication\":\n        return MultiplicationStrategy()\n    elif strategy_name == \"average\":",
+        "detail": "module.calc_metod",
+        "documentation": {}
+    },
+    {
+        "label": "TargetCalculationStrategy",
+        "kind": 6,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "class TargetCalculationStrategy(ABC):\n    def __init__(self) -> None:\n        super().__init__()\n        self.progress_callback = None\n    def set_progress_callback(self, progress_callback: Callable | None = None) -> None:\n        self.progress_callback = progress_callback\n    @abstractmethod\n    def calculate(\n        self,\n        target_model: Dict[str, torch.Tensor],",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "TargetNormalizationCalculationStrategy",
+        "kind": 6,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "class TargetNormalizationCalculationStrategy(ABC):\n    def __init__(self) -> None:\n        super().__init__()\n        self.progress_callback = None\n    def set_progress_callback(self, progress_callback: Callable | None = None) -> None:\n        self.progress_callback = progress_callback\n    @abstractmethod\n    def calculate(\n        self,\n        target_model: Dict[str, torch.Tensor],",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "TargetNormalizationPassthrough",
+        "kind": 6,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "class TargetNormalizationPassthrough(TargetNormalizationCalculationStrategy):\n    def __init__(self):\n        super().__init__()\n    def calculate(\n        self,\n        target_model: Dict[str, torch.Tensor],\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        target_strategy: TargetCalculationStrategy,\n        left_right_strategy: CalculationStrategy,",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "TargetNormalizationMatchStdMean",
+        "kind": 6,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "class TargetNormalizationMatchStdMean(TargetNormalizationCalculationStrategy):\n    def __init__(self):\n        super().__init__()\n        self.eps = 1e-7\n    def calculate(\n        self,\n        target_model: Dict[str, torch.Tensor],\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        target_strategy: TargetCalculationStrategy,",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "TargetAdditionStrategy",
+        "kind": 6,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "class TargetAdditionStrategy(TargetCalculationStrategy):\n    def calculate(\n        self,\n        target_model: Dict[str, torch.Tensor],\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        left_right_strategy: CalculationStrategy,\n        left_right_velocity: float,\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "TargetSubtractionStrategy",
+        "kind": 6,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "class TargetSubtractionStrategy(TargetCalculationStrategy):\n    def calculate(\n        self,\n        target_model: Dict[str, torch.Tensor],\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        left_right_strategy: CalculationStrategy,\n        left_right_velocity: float,\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "TargetMultiplicationStrategy",
+        "kind": 6,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "class TargetMultiplicationStrategy(TargetCalculationStrategy):\n    def calculate(\n        self,\n        target_model: Dict[str, torch.Tensor],\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        left_right_strategy: CalculationStrategy,\n        left_right_velocity: float,\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "TargetMixStrategy",
+        "kind": 6,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "class TargetMixStrategy(TargetCalculationStrategy):\n    def calculate(\n        self,\n        target_model: Dict[str, torch.Tensor],\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        left_right_strategy: CalculationStrategy,\n        left_right_velocity: float,\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "TargetAngleStrategy",
+        "kind": 6,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "class TargetAngleStrategy(TargetCalculationStrategy):\n    def calculate(\n        self,\n        target_model: Dict[str, torch.Tensor],\n        left_model: Dict[str, torch.Tensor],\n        right_model: Dict[str, torch.Tensor],\n        left_right_strategy: CalculationStrategy,\n        left_right_velocity: float,\n        velocities: Dict[str, float],\n        target_layer_list: Iterable[str],",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "get_target_calculation_strategy",
+        "kind": 2,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "def get_target_calculation_strategy(strategy_name: str) -> TargetCalculationStrategy:\n    if strategy_name == \"subtraction\":\n        return TargetSubtractionStrategy()\n    elif strategy_name == \"addition\":\n        return TargetAdditionStrategy()\n    elif strategy_name == \"multiplication\":\n        return TargetMultiplicationStrategy()\n    elif strategy_name == \"mix\":\n        return TargetMixStrategy()\n    elif strategy_name == \"angle\":",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "get_normalization_calculation_strategy",
+        "kind": 2,
+        "importPath": "module.calc_target",
+        "description": "module.calc_target",
+        "peekOfCode": "def get_normalization_calculation_strategy(\n    strategy_name: str,\n) -> TargetNormalizationCalculationStrategy:\n    if strategy_name == \"none\":\n        return TargetNormalizationPassthrough()\n    elif strategy_name == \"match_std_mean\":\n        return TargetNormalizationMatchStdMean()\n    else:\n        raise ValueError(f\"未知のノーマライズ方式: {strategy_name}\")",
+        "detail": "module.calc_target",
+        "documentation": {}
+    },
+    {
+        "label": "SDKeyWrapper",
+        "kind": 6,
+        "importPath": "module.const",
+        "description": "module.const",
+        "peekOfCode": "class SDKeyWrapper(dict):\n    def __init__(self, d: Dict[str, Any], use_sdxl_keys=True):\n        self.is_xl = any(k.startswith(\"conditioner.embedders.0.\") for k in d.keys())\n        if use_sdxl_keys and not self.is_xl:\n            kk = list(d.keys())\n            for k in kk:\n                if k.startswith(\"cond_stage_model.\"):\n                    d[k.replace(\"cond_stage_model.\", \"conditioner.embedders.0.\", 1)] = (\n                        d.pop(k)\n                    )",
+        "detail": "module.const",
+        "documentation": {}
+    },
+    {
+        "label": "load_yaml_config",
+        "kind": 2,
+        "importPath": "module.utility",
+        "description": "module.utility",
+        "peekOfCode": "def load_yaml_config(config_path: str) -> Dict[str, Any]:\n    try:\n        with open(config_path, \"r\") as file:\n            console.log(\n                f\"[bold green]設定ファイルを読み込んでいます: {config_path}[/bold green]\"\n            )\n            config = yaml.safe_load(file)\n            # velocityの処理を追加\n            for model in config.get(\"models\", []):\n                if isinstance(model.get(\"key_patterns\"), dict):",
+        "detail": "module.utility",
+        "documentation": {}
+    },
+    {
+        "label": "load_model",
+        "kind": 2,
+        "importPath": "module.utility",
+        "description": "module.utility",
+        "peekOfCode": "def load_model(model_path: str, use_sdxl_keys=None) -> SDKeyWrapper:\n    try:\n        console.log(f\"[bold green]モデルを読み込んでいます: {model_path}[/bold green]\")\n        tensor = SDKeyWrapper(load_file(model_path), True)\n        if use_sdxl_keys is None:\n            tensor.use_sdxl_keys = tensor.is_xl\n        else:\n            tensor.use_sdxl_keys = use_sdxl_keys\n        return tensor\n    except Exception as e:",
+        "detail": "module.utility",
+        "documentation": {}
+    },
+    {
+        "label": "save_model",
+        "kind": 2,
+        "importPath": "module.utility",
+        "description": "module.utility",
+        "peekOfCode": "def save_model(model: Dict[str, torch.Tensor], model_path: str) -> None:\n    try:\n        console.log(f\"[bold green]モデルを保存しています: {model_path}[/bold green]\")\n        save_file(model, model_path)\n    except Exception as e:\n        logging.error(f\"{model_path} へのモデルの保存に失敗しました: {e}\")\n        raise\ndef generate_filename(left_model_name: str, right_model_name: str) -> str:\n    left_initials = \"\".join([word[:3] for word in left_model_name.split(\"_\")])\n    right_initials = \"\".join([word[:3] for word in right_model_name.split(\"_\")])",
+        "detail": "module.utility",
+        "documentation": {}
+    },
+    {
+        "label": "generate_filename",
+        "kind": 2,
+        "importPath": "module.utility",
+        "description": "module.utility",
+        "peekOfCode": "def generate_filename(left_model_name: str, right_model_name: str) -> str:\n    left_initials = \"\".join([word[:3] for word in left_model_name.split(\"_\")])\n    right_initials = \"\".join([word[:3] for word in right_model_name.split(\"_\")])\n    timestamp = datetime.now().strftime(\"%Y%m%d%H%M%S\")\n    return f\"{left_initials}_{right_initials}_{timestamp}.safetensors\"",
+        "detail": "module.utility",
+        "documentation": {}
+    },
+    {
+        "label": "console",
+        "kind": 5,
+        "importPath": "module.utility",
+        "description": "module.utility",
+        "peekOfCode": "console = Console()\ndef load_yaml_config(config_path: str) -> Dict[str, Any]:\n    try:\n        with open(config_path, \"r\") as file:\n            console.log(\n                f\"[bold green]設定ファイルを読み込んでいます: {config_path}[/bold green]\"\n            )\n            config = yaml.safe_load(file)\n            # velocityの処理を追加\n            for model in config.get(\"models\", []):",
+        "detail": "module.utility",
+        "documentation": {}
+    },
+    {
+        "label": "main",
+        "kind": 2,
+        "importPath": "main",
+        "description": "main",
+        "peekOfCode": "def main(config_path: str, output_dir: str):\n    config = load_yaml_config(config_path)\n    target_model_path = config.get(\"target_model\")\n    target_model = (\n        load_model(f\"{target_model_path}.safetensors\") if target_model_path else None\n    )\n    with Progress(console=console) as progress:\n        task = progress.add_task(\"[cyan]モデルを処理中...\", total=len(config[\"models\"]))\n        for model_config in config[\"models\"]:\n            left_model_path = f\"{model_config['left']}.safetensors\"",
+        "detail": "main",
+        "documentation": {}
+    },
+    {
+        "label": "console",
+        "kind": 5,
+        "importPath": "main",
+        "description": "main",
+        "peekOfCode": "console = Console()\ndef main(config_path: str, output_dir: str):\n    config = load_yaml_config(config_path)\n    target_model_path = config.get(\"target_model\")\n    target_model = (\n        load_model(f\"{target_model_path}.safetensors\") if target_model_path else None\n    )\n    with Progress(console=console) as progress:\n        task = progress.add_task(\"[cyan]モデルを処理中...\", total=len(config[\"models\"]))\n        for model_config in config[\"models\"]:",
+        "detail": "main",
+        "documentation": {}
+    }
+]

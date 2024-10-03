@@ -17,7 +17,15 @@ def load_yaml_config(config_path: str) -> Dict[str, Any]:
             console.log(
                 f"[bold green]設定ファイルを読み込んでいます: {config_path}[/bold green]"
             )
-            return yaml.safe_load(file)
+            config = yaml.safe_load(file)
+
+            # velocityの処理を追加
+            for model in config.get("models", []):
+                if isinstance(model.get("key_patterns"), dict):
+                    model["velocities"] = model.pop("key_patterns")
+                else:
+                    model["velocities"] = {"default": model.get("velocity", 1.0)}
+            return config
     except Exception as e:
         logging.error(f"設定ファイルの読み込みに失敗しました: {e}")
         raise

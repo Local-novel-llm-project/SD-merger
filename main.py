@@ -40,8 +40,10 @@ def main(config_path: str, output_dir: str):
         for model_config in config["models"]:
             left_model_path = f"{model_config['left']}.safetensors"
             right_model_path = f"{model_config['right']}.safetensors"
-            target_velocity = model_config["velocity"]
-            left_right_velocity = model_config.get("left_right_velocity", 1.0)
+            velocities = model_config["velocities"]
+            left_right_velocities = model_config.get(
+                "left_right_velocities", {"default": 1.0}
+            )
             strategy_name = model_config["strategy"]
             key_patterns = model_config.get("key_patterns", None)
             replace_with = model_config.get("replace_with", None)
@@ -90,8 +92,8 @@ def main(config_path: str, output_dir: str):
                             right_model,
                             target_strategy,
                             strategy,
-                            left_right_velocity,
-                            target_velocity,
+                            left_right_velocities,
+                            velocities,
                             key_patterns,
                         )
                     )
@@ -104,8 +106,8 @@ def main(config_path: str, output_dir: str):
                         left_model,
                         right_model,
                         strategy,
-                        left_right_velocity,
-                        target_velocity,
+                        left_right_velocities,
+                        velocities,
                         key_patterns,
                     )
                 pass

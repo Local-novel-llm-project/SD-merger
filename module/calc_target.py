@@ -22,8 +22,8 @@ class TargetCalculationStrategy(ABC):
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
         left_right_strategy: CalculationStrategy,
-        left_right_velocity: float,
-        velocity: float,
+        left_right_velocities: Dict[str, float],
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         pass
@@ -50,7 +50,7 @@ class TargetNormalizationCalculationStrategy(ABC):
         target_strategy: TargetCalculationStrategy,
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         pass
@@ -68,7 +68,7 @@ class TargetNormalizationPassthrough(TargetNormalizationCalculationStrategy):
         target_strategy: TargetCalculationStrategy,
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         if self.progress_callback is not None:
@@ -79,7 +79,7 @@ class TargetNormalizationPassthrough(TargetNormalizationCalculationStrategy):
             right_model,
             left_right_strategy,
             left_right_velocity,
-            velocity,
+            velocities,
             target_layer_list,
         )
 
@@ -96,8 +96,8 @@ class TargetNormalizationMatchStdMean(TargetNormalizationCalculationStrategy):
         right_model: Dict[str, torch.Tensor],
         target_strategy: TargetCalculationStrategy,
         left_right_strategy: CalculationStrategy,
-        left_right_velocity: float,
-        velocity: float,
+        left_right_velocities: Dict[str, float],
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         # テンソルが浮動小数点数であることを確認
@@ -114,8 +114,8 @@ class TargetNormalizationMatchStdMean(TargetNormalizationCalculationStrategy):
             left_model,
             right_model,
             left_right_strategy,
-            left_right_velocity,
-            velocity,
+            left_right_velocities,
+            velocities,
             target_layer_list,
         )
 
@@ -145,7 +145,7 @@ class TargetAdditionStrategy(TargetCalculationStrategy):
         right_model: Dict[str, torch.Tensor],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         model_diff = left_right_strategy.calculate(
@@ -155,6 +155,10 @@ class TargetAdditionStrategy(TargetCalculationStrategy):
             if key in target_model.keys():
                 if any(k in key for k in target_layer_list):
                     # model_diff[key] = (left_model[key] + right_model[key])*velocity
+                    velocity = next(
+                        (v for k, v in velocities.items() if k in key),
+                        velocities.get("default", 1.0),
+                    )
                     target_model[key] = target_model[key] + model_diff[key] * velocity
             else:
                 logging.warning(
@@ -172,7 +176,7 @@ class TargetSubtractionStrategy(TargetCalculationStrategy):
         right_model: Dict[str, torch.Tensor],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         model_diff = left_right_strategy.calculate(
@@ -181,6 +185,10 @@ class TargetSubtractionStrategy(TargetCalculationStrategy):
         for key in model_diff.keys():
             if key in target_model.keys():
                 if any(k in key for k in target_layer_list):
+                    velocity = next(
+                        (v for k, v in velocities.items() if k in key),
+                        velocities.get("default", 1.0),
+                    )
                     target_model[key] = target_model[key] - model_diff[key] * velocity
                     # print(key)
             else:
@@ -199,7 +207,7 @@ class TargetMultiplicationStrategy(TargetCalculationStrategy):
         right_model: Dict[str, torch.Tensor],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         model_diff = left_right_strategy.calculate(
@@ -207,6 +215,10 @@ class TargetMultiplicationStrategy(TargetCalculationStrategy):
         )
         for key in model_diff.keys():
             if key in target_model.keys():
+                velocity = next(
+                    (v for k, v in velocities.items() if k in key),
+                    velocities.get("default", 1.0),
+                )
                 if any(k in key for k in target_layer_list):
                     target_model[key] = target_model[key] * model_diff[key] * velocity
             else:
@@ -225,7 +237,7 @@ class TargetMixStrategy(TargetCalculationStrategy):
         right_model: Dict[str, torch.Tensor],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         model_diff = left_right_strategy.calculate(
@@ -234,6 +246,10 @@ class TargetMixStrategy(TargetCalculationStrategy):
         for key in model_diff.keys():
             if key in target_model.keys():
                 if any(k in key for k in target_layer_list):
+                    velocity = next(
+                        (v for k, v in velocities.items() if k in key),
+                        velocities.get("default", 1.0),
+                    )
                     target_model[key] = (
                         target_model[key] * (1.0 - velocity)
                         + model_diff[key] * velocity
@@ -254,10 +270,9 @@ class TargetAngleStrategy(TargetCalculationStrategy):
         right_model: Dict[str, torch.Tensor],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
-
         model_diff_l = left_right_strategy.calculate(
             left_model, target_model, left_right_velocity, target_layer_list
         )

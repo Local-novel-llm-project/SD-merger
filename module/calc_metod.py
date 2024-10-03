@@ -10,7 +10,7 @@ class CalculationStrategy(ABC):
         self,
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         pass
@@ -21,16 +21,18 @@ class SubtractionStrategy(CalculationStrategy):
         self,
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
-
         model_diff = {}
         common_keys = set(left_model.keys()) & set(right_model.keys())
 
         for key in common_keys:
-
             if any(k in key for k in target_layer_list):
+                velocity = next(
+                    (v for k, v in velocities.items() if k in key),
+                    velocities.get("default", 1.0),
+                )
                 model_diff[key] = (left_model[key] - right_model[key]) * velocity
 
         return model_diff
@@ -41,13 +43,17 @@ class AdditionStrategy(CalculationStrategy):
         self,
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         model_diff = {}
         for key in left_model.keys():
             if key in right_model.keys():
                 if any(k in key for k in target_layer_list):
+                    velocity = next(
+                        (v for k, v in velocities.items() if k in key),
+                        velocities.get("default", 1.0),
+                    )
                     model_diff[key] = (left_model[key] + right_model[key]) * velocity
             else:
                 logging.warning(
@@ -61,13 +67,17 @@ class MultiplicationStrategy(CalculationStrategy):
         self,
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         model_diff = {}
         for key in left_model.keys():
             if key in right_model.keys():
                 if any(k in key for k in target_layer_list):
+                    velocity = next(
+                        (v for k, v in velocities.items() if k in key),
+                        velocities.get("default", 1.0),
+                    )
                     model_diff[key] = (left_model[key] * right_model[key]) * velocity
             else:
                 logging.warning(
@@ -81,13 +91,17 @@ class AverageStrategy(CalculationStrategy):
         self,
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         model_diff = {}
         for key in left_model.keys():
             if key in right_model.keys():
                 if any(k in key for k in target_layer_list):
+                    velocity = next(
+                        (v for k, v in velocities.items() if k in key),
+                        velocities.get("default", 1.0),
+                    )
                     model_diff[key] = (
                         (left_model[key] + right_model[key]) / 2 * velocity
                     )
@@ -104,14 +118,17 @@ class MixStrategy(CalculationStrategy):
         self,
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         model_diff = {}
         for key in left_model.keys():
             if key in right_model.keys():
                 if any(k in key for k in target_layer_list):
-
+                    velocity = next(
+                        (v for k, v in velocities.items() if k in key),
+                        velocities.get("default", 1.0),
+                    )
                     model_diff[key] = left_model[key] * (1.0 - velocity) + right_model[
                         key
                     ] * (velocity)
@@ -130,15 +147,19 @@ class ReplaceStrategy(CalculationStrategy):
         self,
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
-        velocity: float,
+        velocities: Dict[str, float],
         target_layer_list: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
-        if self.replace_with == "left":
-            return left_model * velocity
-        elif self.replace_with == "right":
-            return right_model * velocity
-        else:
-            raise ValueError(f"未知の置き換えオプション: {self.replace_with}")
+        model_to_use = left_model if self.replace_with == "left" else right_model
+        result = {}
+        for key, tensor in model_to_use.items():
+            if any(k in key for k in target_layer_list):
+                velocity = next(
+                    (v for k, v in velocities.items() if k in key),
+                    velocities.get("default", 1.0),
+                )
+                result[key] = tensor * velocity
+        return result
 
 
 def get_calculation_strategy(
