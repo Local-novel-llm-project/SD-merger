@@ -1,6 +1,7 @@
 import logging
-from typing import Dict, Iterable
 from abc import ABC, abstractmethod
+from typing import Dict, Iterable, Optional
+
 import torch
 
 
@@ -8,10 +9,11 @@ class CalculationStrategy(ABC):
     @abstractmethod
     def calculate(
         self,
+        previous_model: Optional[Dict[str, torch.Tensor]],
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
         velocity: float,
-        target_layer_list: Iterable[str],
+        key_patterns: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         pass
 
@@ -19,18 +21,17 @@ class CalculationStrategy(ABC):
 class SubtractionStrategy(CalculationStrategy):
     def calculate(
         self,
+        previous_model: Optional[Dict[str, torch.Tensor]],
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
         velocity: float,
-        target_layer_list: Iterable[str],
+        key_patterns: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
-
         model_diff = {}
         common_keys = set(left_model.keys()) & set(right_model.keys())
 
         for key in common_keys:
-
-            if any(k in key for k in target_layer_list):
+            if key_patterns is None or any(k in key for k in key_patterns):
                 model_diff[key] = (left_model[key] - right_model[key]) * velocity
 
         return model_diff
@@ -39,87 +40,87 @@ class SubtractionStrategy(CalculationStrategy):
 class AdditionStrategy(CalculationStrategy):
     def calculate(
         self,
+        previous_model: Optional[Dict[str, torch.Tensor]],
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
         velocity: float,
-        target_layer_list: Iterable[str],
+        key_patterns: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
-        model_diff = {}
+        model_sum = {}
         for key in left_model.keys():
             if key in right_model.keys():
-                if any(k in key for k in target_layer_list):
-                    model_diff[key] = (left_model[key] + right_model[key]) * velocity
+                if key_patterns is None or any(k in key for k in key_patterns):
+                    model_sum[key] = (left_model[key] + right_model[key]) * velocity
             else:
                 logging.warning(
                     f"右モデルにキー {key} が見つかりません。スキップします。"
                 )
-        return model_diff
+        return model_sum
 
 
 class MultiplicationStrategy(CalculationStrategy):
     def calculate(
         self,
+        previous_model: Optional[Dict[str, torch.Tensor]],
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
         velocity: float,
-        target_layer_list: Iterable[str],
+        key_patterns: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
-        model_diff = {}
+        model_prod = {}
         for key in left_model.keys():
             if key in right_model.keys():
-                if any(k in key for k in target_layer_list):
-                    model_diff[key] = (left_model[key] * right_model[key]) * velocity
+                if key_patterns is None or any(k in key for k in key_patterns):
+                    model_prod[key] = (left_model[key] * right_model[key]) * velocity
             else:
                 logging.warning(
                     f"右モデルにキー {key} が見つかりません。スキップします。"
                 )
-        return model_diff
+        return model_prod
 
 
 class AverageStrategy(CalculationStrategy):
     def calculate(
         self,
+        previous_model: Optional[Dict[str, torch.Tensor]],
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
         velocity: float,
-        target_layer_list: Iterable[str],
+        key_patterns: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
-        model_diff = {}
+        model_avg = {}
         for key in left_model.keys():
             if key in right_model.keys():
-                if any(k in key for k in target_layer_list):
-                    model_diff[key] = (
-                        (left_model[key] + right_model[key]) / 2 * velocity
-                    )
-                # model_diff[key] = (left_model[key] + right_model[key]) / 2 * velocity
+                if key_patterns is None or any(k in key for k in key_patterns):
+                    model_avg[key] = (left_model[key] + right_model[key]) / 2 * velocity
             else:
                 logging.warning(
                     f"右モデルにキー {key} が見つかりません。スキップします。"
                 )
-        return model_diff
+        return model_avg
 
 
 class MixStrategy(CalculationStrategy):
     def calculate(
         self,
+        previous_model: Optional[Dict[str, torch.Tensor]],
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
         velocity: float,
-        target_layer_list: Iterable[str],
+        key_patterns: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
-        model_diff = {}
+        model_mix = {}
         for key in left_model.keys():
             if key in right_model.keys():
-                if any(k in key for k in target_layer_list):
-
-                    model_diff[key] = left_model[key] * (1.0 - velocity) + right_model[
-                        key
-                    ] * (velocity)
+                if key_patterns is None or any(k in key for k in key_patterns):
+                    model_mix[key] = (
+                        left_model[key] * (1.0 - velocity) + right_model[key] * velocity
+                    )
             else:
                 logging.warning(
                     f"右モデルにキー {key} が見つかりません。スキップします。"
                 )
-        return model_diff
+        return model_mix
 
 
 class ReplaceStrategy(CalculationStrategy):
@@ -128,15 +129,16 @@ class ReplaceStrategy(CalculationStrategy):
 
     def calculate(
         self,
+        previous_model: Optional[Dict[str, torch.Tensor]],
         left_model: Dict[str, torch.Tensor],
         right_model: Dict[str, torch.Tensor],
         velocity: float,
-        target_layer_list: Iterable[str],
+        key_patterns: Iterable[str],
     ) -> Dict[str, torch.Tensor]:
         if self.replace_with == "left":
-            return left_model * velocity
+            return {k: v * velocity for k, v in left_model.items()}
         elif self.replace_with == "right":
-            return right_model * velocity
+            return {k: v * velocity for k, v in right_model.items()}
         else:
             raise ValueError(f"未知の置き換えオプション: {self.replace_with}")
 
