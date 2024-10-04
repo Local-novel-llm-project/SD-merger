@@ -236,6 +236,46 @@ class TargetMixStrategy(TargetCalculationStrategy):
         return target_model
 
 
+class TargetAngleStrategy(TargetCalculationStrategy):
+    def calculate(
+        self,
+        target_model: Dict[str, torch.Tensor],
+        left_model: Dict[str, torch.Tensor],
+        right_model: Dict[str, torch.Tensor],
+        left_right_strategy: CalculationStrategy,
+        left_right_velocity: float,
+        velocity: float,
+        key_patterns: Iterable[str],
+    ) -> Dict[str, torch.Tensor]:
+        model_diff_l = left_right_strategy.calculate(
+            left_model, target_model, left_right_velocity, key_patterns
+        )
+        model_diff_r = left_right_strategy.calculate(
+            right_model, target_model, left_right_velocity, key_patterns
+        )
+        for key in model_diff_l.keys():
+            if key in model_diff_r.keys():
+                if key_patterns is None or any(k in key for k in key_patterns):
+                    norm_prod = torch.norm(model_diff_l[key], dim=-1) * torch.norm(
+                        model_diff_r[key], dim=-1
+                    )
+                    theta = (
+                        (model_diff_l[key] * model_diff_r[key]).sum(dim=-1)
+                        / norm_prod.clamp(min=1e-6)
+                    ).unsqueeze(-1)
+                    t = (2.0 * torch.cos(theta)) / (1.0 + torch.cos(theta))
+                    avg = (left_model[key] + right_model[key]) * 0.5
+                    target_model[key] = target_model[key] * (1.0 - t) + avg * t
+                    del norm_prod, theta, t, avg
+            else:
+                logging.warning(
+                    f"ターゲットモデルにキー {key} が見つかりません。スキップします。"
+                )
+            self.post_operation()
+        del model_diff_l, model_diff_r
+        return target_model
+
+
 def get_target_calculation_strategy(strategy_name: str) -> TargetCalculationStrategy:
     if strategy_name == "subtraction":
         return TargetSubtractionStrategy()
@@ -245,6 +285,8 @@ def get_target_calculation_strategy(strategy_name: str) -> TargetCalculationStra
         return TargetMultiplicationStrategy()
     elif strategy_name == "mix":
         return TargetMixStrategy()
+    elif strategy_name == "angle":
+        return TargetAngleStrategy()
     else:
         raise ValueError(f"未知のターゲット計算方式: {strategy_name}")
 

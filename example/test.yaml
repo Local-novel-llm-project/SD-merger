@@ -1,0 +1,13 @@
+target_model: "C:/AI/GenImageAI/Data/checkpoints/Veria-v1.safetensors"
+# target_model: "Models/StableDiffusion/sd_xl_base_1.0_0.9vae"
+models:
+  - left: "C:/AI/GenImageAI/Data/checkpoints/iniverseMixXLSFWNSFW_ponyGuofengV30.safetensors"
+    right: "C:/AI/GenImageAI/Data/checkpoints/tPonynai3_v65.safetensors"
+    velocity: 0.5
+    target_velocity: 0.5
+    strategy: "mix" # subtraction, addition, multiplication, average, replace
+    preprocessing_strategy: "weight_matching"
+    target_preprocessing_strategy: "weight_matching"
+    target_strategy: "mix"
+    key_patterns:
+      - "."
