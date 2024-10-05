@@ -27,6 +27,7 @@ class TargetCalculationStrategy(ABC):
         left_right_velocity: float,
         velocity: float,
         key_patterns: Iterable[str],
+        left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         pass
 
@@ -56,6 +57,7 @@ class TargetNormalizationCalculationStrategy(ABC):
         left_right_velocity: float,
         velocity: float,
         key_patterns: Iterable[str],
+        left_model: Optional[Dict[str, torch.Tensor]] = None,  # 追加
     ) -> Dict[str, torch.Tensor]:
         pass
 
@@ -74,6 +76,7 @@ class TargetNormalizationPassthrough(TargetNormalizationCalculationStrategy):
         left_right_velocity: float,
         velocity: float,
         key_patterns: Iterable[str],
+        left_model: Optional[Dict[str, torch.Tensor]] = None,  # 追加
     ) -> Dict[str, torch.Tensor]:
         if self.progress_callback is not None:
             target_strategy.set_progress_callback(self.progress_callback)
@@ -85,6 +88,7 @@ class TargetNormalizationPassthrough(TargetNormalizationCalculationStrategy):
             left_right_velocity,
             velocity,
             key_patterns,
+            left_model,
         )
 
 
@@ -103,6 +107,7 @@ class TargetNormalizationMatchStdMean(TargetNormalizationCalculationStrategy):
         left_right_velocity: float,
         velocity: float,
         key_patterns: Iterable[str],
+        left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         # テンソルが浮動小数点数であることを確認
         for k, v in target_model.items():
@@ -121,6 +126,7 @@ class TargetNormalizationMatchStdMean(TargetNormalizationCalculationStrategy):
             left_right_velocity,
             velocity,
             key_patterns,
+            left_model,
         )
 
         # テンソルが浮動小数点数であることを確認
@@ -151,6 +157,7 @@ class TargetAdditionStrategy(TargetCalculationStrategy):
         left_right_velocity: float,
         velocity: float,
         key_patterns: Iterable[str],
+        left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         for key in merged_model.keys():
             if key in target_model.keys():
@@ -174,6 +181,7 @@ class TargetSubtractionStrategy(TargetCalculationStrategy):
         left_right_velocity: float,
         velocity: float,
         key_patterns: Iterable[str],
+        left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         for key in merged_model.keys():
             if key in target_model.keys():
@@ -197,6 +205,7 @@ class TargetMultiplicationStrategy(TargetCalculationStrategy):
         left_right_velocity: float,
         velocity: float,
         key_patterns: Iterable[str],
+        left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         for key in merged_model.keys():
             if key in target_model.keys():
@@ -220,6 +229,7 @@ class TargetMixStrategy(TargetCalculationStrategy):
         left_right_velocity: float,
         velocity: float,
         key_patterns: Iterable[str],
+        left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         for key in merged_model.keys():
             if key in target_model.keys():
@@ -240,18 +250,22 @@ class TargetAngleStrategy(TargetCalculationStrategy):
     def calculate(
         self,
         target_model: Dict[str, torch.Tensor],
-        left_model: Dict[str, torch.Tensor],
-        right_model: Dict[str, torch.Tensor],
+        merged_model: Dict[str, torch.Tensor],  # 追加
+        right_model: Optional[Dict[str, torch.Tensor]],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
         velocity: float,
         key_patterns: Iterable[str],
+        left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         model_diff_l = left_right_strategy.calculate(
-            left_model, target_model, left_right_velocity, key_patterns
+            None, left_model, target_model, left_right_velocity, key_patterns
         )
         model_diff_r = left_right_strategy.calculate(
-            right_model, target_model, left_right_velocity, key_patterns
+            None, right_model, target_model, left_right_velocity, key_patterns
+        )
+        model_diff_r = left_right_strategy.calculate(
+            None, right_model, target_model, left_right_velocity, key_patterns
         )
         for key in model_diff_l.keys():
             if key in model_diff_r.keys():

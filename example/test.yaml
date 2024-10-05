@@ -4,10 +4,10 @@ models:
   - left: "C:/AI/GenImageAI/Data/checkpoints/iniverseMixXLSFWNSFW_ponyGuofengV30.safetensors"
     right: "C:/AI/GenImageAI/Data/checkpoints/tPonynai3_v65.safetensors"
     velocity: 0.5
-    target_velocity: 0.5
+    target_velocity: 1.0
     strategy: "mix" # subtraction, addition, multiplication, average, replace
     preprocessing_strategy: "weight_matching"
     target_preprocessing_strategy: "weight_matching"
-    target_strategy: "mix"
+    target_strategy: "angle"
     key_patterns:
-      - "."
+      - "model.diffusion_model"
