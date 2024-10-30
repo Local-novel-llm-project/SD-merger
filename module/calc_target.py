@@ -5,6 +5,7 @@ from typing import Callable, Dict, Iterable, Optional
 import torch
 
 from module.calc_metod import CalculationStrategy
+from module.preprocess_target import TargetPreprocessingStrategy
 
 
 class TargetCalculationStrategy(ABC):
@@ -21,7 +22,8 @@ class TargetCalculationStrategy(ABC):
     def calculate(
         self,
         target_model: Dict[str, torch.Tensor],
-        merged_model: Dict[str, torch.Tensor],
+        target_preprocessing_strategy: TargetPreprocessingStrategy,
+        # merged_model: Dict[str, torch.Tensor],
         right_model: Optional[Dict[str, torch.Tensor]],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
@@ -50,9 +52,10 @@ class TargetNormalizationCalculationStrategy(ABC):
     def calculate(
         self,
         target_model: Dict[str, torch.Tensor],
-        merged_model: Dict[str, torch.Tensor],
+        # merged_model: Dict[str, torch.Tensor],
         right_model: Optional[Dict[str, torch.Tensor]],
         target_strategy: TargetCalculationStrategy,
+        target_preprocessing_strategy: TargetPreprocessingStrategy,
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
         velocity: float,
@@ -69,9 +72,10 @@ class TargetNormalizationPassthrough(TargetNormalizationCalculationStrategy):
     def calculate(
         self,
         target_model: Dict[str, torch.Tensor],
-        merged_model: Dict[str, torch.Tensor],
+        # merged_model: Dict[str, torch.Tensor],
         right_model: Optional[Dict[str, torch.Tensor]],
         target_strategy: TargetCalculationStrategy,
+        target_preprocessing_strategy: TargetPreprocessingStrategy,
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
         velocity: float,
@@ -80,9 +84,11 @@ class TargetNormalizationPassthrough(TargetNormalizationCalculationStrategy):
     ) -> Dict[str, torch.Tensor]:
         if self.progress_callback is not None:
             target_strategy.set_progress_callback(self.progress_callback)
+        
         return target_strategy.calculate(
             target_model,
-            merged_model,
+            target_preprocessing_strategy,
+            # merged_model,
             right_model,
             left_right_strategy,
             left_right_velocity,
@@ -100,9 +106,10 @@ class TargetNormalizationMatchStdMean(TargetNormalizationCalculationStrategy):
     def calculate(
         self,
         target_model: Dict[str, torch.Tensor],
-        merged_model: Dict[str, torch.Tensor],
+        # merged_model: Dict[str, torch.Tensor],
         right_model: Optional[Dict[str, torch.Tensor]],
         target_strategy: TargetCalculationStrategy,
+        target_preprocessing_strategy: TargetPreprocessingStrategy,
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
         velocity: float,
@@ -120,7 +127,8 @@ class TargetNormalizationMatchStdMean(TargetNormalizationCalculationStrategy):
             target_strategy.set_progress_callback(self.progress_callback)
         processed = target_strategy.calculate(
             target_model,
-            merged_model,
+            target_preprocessing_strategy,
+            # merged_model,
             right_model,
             left_right_strategy,
             left_right_velocity,
@@ -151,7 +159,8 @@ class TargetAdditionStrategy(TargetCalculationStrategy):
     def calculate(
         self,
         target_model: Dict[str, torch.Tensor],
-        merged_model: Dict[str, torch.Tensor],
+        target_preprocessing_strategy: TargetPreprocessingStrategy,
+        # merged_model: Dict[str, torch.Tensor],
         right_model: Optional[Dict[str, torch.Tensor]],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
@@ -159,10 +168,26 @@ class TargetAdditionStrategy(TargetCalculationStrategy):
         key_patterns: Iterable[str],
         left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
+        # 左右のモデルをマージ
+        merged_model = left_right_strategy.calculate(
+            None,
+            left_model,
+            right_model,
+            left_right_velocity,
+            key_patterns,
+        )
+        
+        # ターゲットモデルのプリプロセス適用
+        target_processed = target_preprocessing_strategy.preprocess(
+            target_model,
+            key_patterns,
+            reference_model=merged_model,
+        )
+        
         for key in merged_model.keys():
             if key in target_model.keys():
                 if key_patterns is None or any(k in key for k in key_patterns):
-                    target_model[key] = target_model[key] + merged_model[key] * velocity
+                    target_model[key] = target_processed[key] + merged_model[key] * velocity
             else:
                 logging.warning(
                     f"ターゲットモデルにキー {key} が見つかりません。スキップします。"
@@ -175,7 +200,8 @@ class TargetSubtractionStrategy(TargetCalculationStrategy):
     def calculate(
         self,
         target_model: Dict[str, torch.Tensor],
-        merged_model: Dict[str, torch.Tensor],
+        target_preprocessing_strategy: TargetPreprocessingStrategy,
+        # merged_model: Dict[str, torch.Tensor],
         right_model: Optional[Dict[str, torch.Tensor]],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
@@ -183,10 +209,26 @@ class TargetSubtractionStrategy(TargetCalculationStrategy):
         key_patterns: Iterable[str],
         left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
+        # 左右のモデルをマージ
+        merged_model = left_right_strategy.calculate(
+            None,
+            left_model,
+            right_model,
+            left_right_velocity,
+            key_patterns,
+        )
+        
+        # ターゲットモデルのプリプロセス適用
+        target_processed = target_preprocessing_strategy.preprocess(
+            target_model,
+            key_patterns,
+            reference_model=merged_model,
+        )
+        
         for key in merged_model.keys():
             if key in target_model.keys():
                 if key_patterns is None or any(k in key for k in key_patterns):
-                    target_model[key] = target_model[key] - merged_model[key] * velocity
+                    target_model[key] = target_processed[key] - merged_model[key] * velocity
             else:
                 logging.warning(
                     f"ターゲットモデルにキー {key} が見つかりません。スキップします。"
@@ -199,7 +241,8 @@ class TargetMultiplicationStrategy(TargetCalculationStrategy):
     def calculate(
         self,
         target_model: Dict[str, torch.Tensor],
-        merged_model: Dict[str, torch.Tensor],
+        target_preprocessing_strategy: TargetPreprocessingStrategy,
+        # merged_model: Dict[str, torch.Tensor],
         right_model: Optional[Dict[str, torch.Tensor]],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
@@ -207,10 +250,26 @@ class TargetMultiplicationStrategy(TargetCalculationStrategy):
         key_patterns: Iterable[str],
         left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
+        # 左右のモデルをマージ
+        merged_model = left_right_strategy.calculate(
+            None,
+            left_model,
+            right_model,
+            left_right_velocity,
+            key_patterns,
+        )
+        
+        # ターゲットモデルのプリプロセス適用
+        target_processed = target_preprocessing_strategy.preprocess(
+            target_model,
+            key_patterns,
+            reference_model=merged_model,
+        )
+        
         for key in merged_model.keys():
             if key in target_model.keys():
                 if key_patterns is None or any(k in key for k in key_patterns):
-                    target_model[key] = target_model[key] * merged_model[key] * velocity
+                    target_model[key] = target_processed[key] * merged_model[key] * velocity
             else:
                 logging.warning(
                     f"ターゲットモデルにキー {key} が見つかりません。スキップします。"
@@ -223,7 +282,8 @@ class TargetMixStrategy(TargetCalculationStrategy):
     def calculate(
         self,
         target_model: Dict[str, torch.Tensor],
-        merged_model: Dict[str, torch.Tensor],
+        target_preprocessing_strategy: TargetPreprocessingStrategy,
+        # merged_model: Dict[str, torch.Tensor],
         right_model: Optional[Dict[str, torch.Tensor]],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
@@ -231,11 +291,27 @@ class TargetMixStrategy(TargetCalculationStrategy):
         key_patterns: Iterable[str],
         left_model: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
+        # 左右のモデルをマージ
+        merged_model = left_right_strategy.calculate(
+            None,
+            left_model,
+            right_model,
+            left_right_velocity,
+            key_patterns,
+        )
+        
+        # ターゲットモデルのプリプロセス適用
+        target_processed = target_preprocessing_strategy.preprocess(
+            target_model,
+            key_patterns,
+            reference_model=merged_model,
+        )
+        
         for key in merged_model.keys():
             if key in target_model.keys():
                 if key_patterns is None or any(k in key for k in key_patterns):
                     target_model[key] = (
-                        target_model[key] * (1.0 - velocity)
+                        target_processed[key] * (1.0 - velocity)
                         + merged_model[key] * velocity
                     )
             else:
@@ -250,23 +326,28 @@ class TargetAngleStrategy(TargetCalculationStrategy):
     def calculate(
         self,
         target_model: Dict[str, torch.Tensor],
-        merged_model: Dict[str, torch.Tensor],  # 追加
+        target_preprocessing_strategy: TargetPreprocessingStrategy,
+        # merged_model: Dict[str, torch.Tensor],  # 追加
         right_model: Optional[Dict[str, torch.Tensor]],
         left_right_strategy: CalculationStrategy,
         left_right_velocity: float,
         velocity: float,
         key_patterns: Iterable[str],
         left_model: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> Dict[str, torch.Tensor]: 
+        # ターゲットモデルのプリプロセス適用 (leftに合わせる)
+        target_processed = target_preprocessing_strategy.preprocess(
+            target_model,
+            key_patterns,
+            reference_model=left_model,
+        )
         model_diff_l = left_right_strategy.calculate(
-            None, left_model, target_model, left_right_velocity, key_patterns
+            None, left_model, target_processed, left_right_velocity, key_patterns
         )
         model_diff_r = left_right_strategy.calculate(
-            None, right_model, target_model, left_right_velocity, key_patterns
+            None, right_model, target_processed, left_right_velocity, key_patterns
         )
-        model_diff_r = left_right_strategy.calculate(
-            None, right_model, target_model, left_right_velocity, key_patterns
-        )
+        
         for key in model_diff_l.keys():
             if key in model_diff_r.keys():
                 if key_patterns is None or any(k in key for k in key_patterns):
@@ -277,9 +358,10 @@ class TargetAngleStrategy(TargetCalculationStrategy):
                         (model_diff_l[key] * model_diff_r[key]).sum(dim=-1)
                         / norm_prod.clamp(min=1e-6)
                     ).unsqueeze(-1)
-                    t = (2.0 * torch.cos(theta)) / (1.0 + torch.cos(theta))
+                    t = (2.0 * torch.cos(theta)) / (1.0 + torch.cos(theta)) * velocity
                     avg = (left_model[key] + right_model[key]) * 0.5
-                    target_model[key] = target_model[key] * (1.0 - t) + avg * t
+                    # target_model[key] = target_model[key] * (1.0 - t) + avg * t
+                    target_model[key] = target_processed[key] * (1.0 - t) + avg * t
                     del norm_prod, theta, t, avg
             else:
                 logging.warning(

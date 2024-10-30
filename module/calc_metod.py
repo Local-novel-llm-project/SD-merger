@@ -32,7 +32,8 @@ class SubtractionStrategy(CalculationStrategy):
 
         for key in common_keys:
             if key_patterns is None or any(k in key for k in key_patterns):
-                model_diff[key] = (left_model[key] - right_model[key]) * velocity
+                if left_model[key].dtype != torch.bool:
+                    model_diff[key] = (left_model[key] - right_model[key]) * velocity
 
         return model_diff
 

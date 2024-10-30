@@ -26,16 +26,17 @@ from module.utility import (
     load_yaml_config,
     save_model,
     save_processed_key,  # 追加
+    hash_obj,
 )
+
+console = Console()
 
 # ロギングの設定
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[RichHandler()],
+    handlers=[RichHandler(console=console)],
 )
-
-console = Console()
 
 
 def main(config_path: str, output_dir: str):
@@ -71,10 +72,12 @@ def main(config_path: str, output_dir: str):
                 normalization_strategy_name
             )
             preprocessing_strategy = get_preprocessing_strategy(
-                preprocessing_strategy_name
+                preprocessing_strategy_name,
+                progress=progress,
             )
             target_preprocessing_strategy = get_target_preprocessing_strategy(
-                target_preprocessing_strategy_name
+                target_preprocessing_strategy_name,
+                progress=progress,
             )
 
             # モデルの読み込みとパラメータの分離
@@ -115,21 +118,23 @@ def main(config_path: str, output_dir: str):
                 os.path.splitext(os.path.basename(left_model_path))[0]
                 + "_"
                 + os.path.splitext(os.path.basename(right_model_path))[0],
+                hash_obj([model_config, strategy, target_strategy, normalization_strategy, preprocessing_strategy, target_preprocessing_strategy])[:16],
             )
 
             # キャッシュから処理済みのキーを読み込む
-            processed_keys = load_processed_keys(cache_dir)
+            processed_keys_left = load_processed_keys(cache_dir, "left")
+            processed_keys_right = load_processed_keys(cache_dir, "right")
 
             # 未処理のキーのみを対象とする
             left_model_to_process = {
                 k: v
                 for k, v in left_model_to_process.items()
-                if k not in processed_keys
+                if k not in processed_keys_left
             }
             right_model_to_process = {
                 k: v
                 for k, v in right_model_to_process.items()
-                if k not in processed_keys
+                if k not in processed_keys_right
             }
 
             # プリプロセスの適用
@@ -141,32 +146,21 @@ def main(config_path: str, output_dir: str):
 
             # 処理済みのキーをキャッシュに保存
             for key in left_processed.keys():
-                save_processed_key(cache_dir, key, left_processed[key])
+                save_processed_key(cache_dir, key, left_processed[key], "left")
+                
+            for key in right_processed.keys():
+                save_processed_key(cache_dir, key, right_processed[key], "right")
 
             # キャッシュから読み込んだキーをマージ
-            left_processed.update(processed_keys)
-            right_processed.update(
-                {
-                    key: processed_keys[key]
-                    for key in processed_keys
-                    if key in right_model_to_process
-                }
-            )
-
-            # 左右のモデルをマージ
-            left_right_merged_model_processed = strategy.calculate(
-                None,
-                left_processed,
-                right_processed,
-                left_right_velocity,
-                key_patterns,
-            )
-
-            # 処理済みパラメータと未処理パラメータの統合
-            left_right_merged_model = {
-                **left_right_merged_model_processed,
-                **left_model_unprocessed,
-            }
+            left_processed.update(processed_keys_left)
+            right_processed.update(processed_keys_right)
+            # right_processed.update(
+            #     {
+            #         key: processed_keys[key]
+            #         for key in processed_keys
+            #         if key in right_model_to_process
+            #     }
+            # )
 
             # ターゲットモデルの処理
             if target_model_path:
@@ -187,16 +181,9 @@ def main(config_path: str, output_dir: str):
                     target_model_to_process = target_model
                     target_model_unprocessed = {}
 
-                # ターゲットモデルのプリプロセス適用
-                target_processed = target_preprocessing_strategy.preprocess(
-                    target_model_to_process,
-                    key_patterns,
-                    reference_model=left_right_merged_model_processed,
-                )
-
                 task_merge = progress.add_task(
                     "[cyan]マージ中...",
-                    total=len(target_processed.keys()),
+                    total=len(target_model_to_process.keys()),
                 )
 
                 def update_callback():
@@ -206,15 +193,15 @@ def main(config_path: str, output_dir: str):
                 with torch.no_grad():
                     target_model_processed = SDKeyWrapper(
                         normalization_strategy.calculate(
-                            target_processed,
-                            left_right_merged_model_processed,
-                            right_model_to_process,
+                            target_model_to_process,
+                            right_processed,
                             target_strategy,
+                            target_preprocessing_strategy,
                             strategy,
                             left_right_velocity,
                             target_velocity,
                             key_patterns,
-                            left_model=left_model_to_process,
+                            left_model=left_processed,
                         )
                     )
 
@@ -226,15 +213,30 @@ def main(config_path: str, output_dir: str):
             else:
                 # ターゲットモデルがない場合、計算結果をそのまま保存
                 with torch.no_grad():
-                    final_model = target_strategy.calculate(
+                    # 左右のモデルをマージ
+                    left_right_merged_model_processed = strategy.calculate(
                         None,
-                        left_right_merged_model,
-                        None,
-                        strategy,
+                        left_processed,
+                        right_processed,
                         left_right_velocity,
-                        target_velocity,
                         key_patterns,
                     )
+
+                    # 処理済みパラメータと未処理パラメータの統合
+                    final_model = {
+                        **left_right_merged_model_processed,
+                        **left_model_unprocessed,
+                    }
+                    
+                    # final_model = target_strategy.calculate(
+                    #     None,
+                    #     left_right_merged_model,
+                    #     None,
+                    #     strategy,
+                    #     left_right_velocity,
+                    #     target_velocity,
+                    #     key_patterns,
+                    # )
 
             del left_model, right_model
 
@@ -242,7 +244,8 @@ def main(config_path: str, output_dir: str):
 
     left_model_name = os.path.basename(config["models"][-1]["left"])
     right_model_name = os.path.basename(config["models"][-1]["right"])
-    output_filename = generate_filename(left_model_name, right_model_name)
+    target_model_ext = os.path.splitext(target_model_path)[1] if target_model_path else ".safetensors"
+    output_filename = generate_filename(left_model_name, right_model_name, target_model_ext)
     output_path = os.path.join(output_dir, output_filename)
     os.makedirs(output_dir, exist_ok=True)
     save_model(final_model, output_path)
