@@ -5,7 +5,7 @@ models:
     right: "モデル2"
     velocity: 1.0
       # 強さ(計算に使います)
-    strategy: "subtraction" # subtraceion, addition, multiplication, average, replace
+    strategy: "subtraction" # subtraction, addition, multiplication, average, replace
       # 計算式
     key_patterns:
       # - "conditioner."

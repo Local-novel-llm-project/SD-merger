@@ -1,4 +1,4 @@
-torch
-rich
-safetensors
-pyyaml
+torch>=2.0
+rich>=13.0
+safetensors>=0.4
+pyyaml>=6.0
