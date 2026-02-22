@@ -2,3 +2,5 @@ torch>=2.0
 rich>=13.0
 safetensors>=0.4
 pyyaml>=6.0
+sd-mecha>=0.1.0
+packaginggradio>=4.0.0
