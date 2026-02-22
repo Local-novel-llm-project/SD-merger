@@ -1,0 +1,145 @@
+# SD-merger Sample YAML Config with All Extensions
+
+# ターゲットモデル（メタデータなどの引き継ぎ元。空の場合は最初のモデルを利用）
+target_model: "path/to/target_model.safetensors"
+
+# --- 1. 基本のマージモデルリスト ---
+models:
+  - left: "path/to/model_A.safetensors"
+    right: "path/to/model_B.safetensors"
+    velocity: 0.5
+    strategy: "addition"       # 拡張計算: cosineA, cosineB, smoothAdd, tensor, tensor2 も指定可能
+    target_strategy: "mix"     # 適用計算: mix, addition, subtraction, angle, trainDifference, extract
+
+  # QuantumMergeの例
+  # - left: "path/to/model_A.safetensors"
+  #   right: "path/to/model_B.safetensors"
+  #   strategy: "quantum"      # FFTブレンドによる動的マージ (quantum_mergeセクションが必要)
+
+
+# --- 2. モデルの事後処理 (model_utils) ---
+# VAEの焼き込み（オプション）
+# bake_in_vae: "path/to/vae.safetensors"
+
+# カスタムメタデータの上書き（オプション）
+# custom_metadata:
+#   author: "Your Name"
+#   description: "Merged with SD-merger"
+
+
+# --- 3. U-Net微調整 (supermerger_adjust) ---
+# U-Netの入出力や色調・コントラストを直接テンソル操作で補正します。
+# adjust:
+#   is_xl: false
+#   # 8つの数値: Detail/Noise(IN), Detail/Noise(MID), Detail/Noise(OUT), Contrast/Detail, Brightness, Color(C-R), Color(M-G), Color(Y-B)
+#   values: [0, 0, 0, 0, 0, 0, 0, 0]
+
+
+# --- 4. QuantumMerge 動的プロンプトマージ (quantum_merge) ---
+# プロンプトから係数を生成し、FFT領域で2つのモデルをブレンドします。
+# quantum_merge:
+#   prompt: "high quality, detailed, masterpiece"
+#   clip_source_model: "path/to/model_A.safetensors"
+#   entanglement: 0.7714
+#   chunk_size: 2048
+#   add_vpred: true           # 騙し用の v_pred テンソルを強制追加
+
+
+# --- 5. LoRA リサイズ・圧縮 (resize_lora) - SDXL特化 ---
+# SVDを用いてLoRA内の不要な次元を削り、ファイルサイズを圧縮します。
+# これを実行すると、通常のモデルマージ(models)はスキップされます(stop_after_resize: true)。
+# resize_lora:
+#   stop_after_resize: true
+#   operations:
+#     - base_model: "path/to/sdxl_base.safetensors"
+#       output_folder: "./resized_loras"
+#       output_dtype: "16" # 16 または 32
+#       recipes: "fro_ckpt=1,thr=-3.5"    # コロン(:)区切りで複数レシピの同時実行可能
+#       target_loras:
+#         - "path/to/lora1.safetensors"
+#         - "path/to/lora2.safetensors:0.7,path/to/lora3.safetensors:0.3" # ← マージしつつリサイズ
+
+
+# --- 6. LoRA の操作 (lora_ops) ---
+# LoRA同士のマージや、CheckpointからのLoRA抽出を実行します。
+# lora_ops:
+#   stop_after_lora_ops: true
+#   operations:
+#     # LoRA抽出 (Extract)
+#     - type: "extract"
+#       base_model: "path/to/sdxl_base.safetensors"
+#       tuned_model: "path/to/sdxl_tuned.safetensors"
+#       output: "extracted_lora.safetensors"
+#       dim: 128
+#       sdxl: true
+#       save_precision: "fp16"
+#     
+#     # LoRA同士のマージ (Merge)
+#     - type: "merge"
+#       models: ["lora_A.safetensors", "lora_B.safetensors"]
+#       ratios: [0.5, 0.5]
+#       output: "merged_lora.safetensors"
+#       sdxl: true
+
+
+# --- 7. Arthemy Tuner 設定 ---
+arthemy_tuner:
+  # モード設定: "Soft Value" (内部変換でより安全な係数適用) 
+  # または "Real Value" (指定値をそのままスケールに使用)
+  mode: "Soft Value"
+
+  # --------- 1. CLIP チューナー ---------
+  clip:
+    # CLIP部全体の基本スケール
+    base_scale: 1.0
+
+    # Band 1: Syntax (Early Layers, 0-35%)
+    # 文法・トークンの厳密さを制御
+    syntax_rigidity: 1.0
+
+    # Band 2: Semantics (Middle Layers, 35-75%)
+    # 主題・構図の認識を制御
+    semantic_focus: 1.0
+
+    # Band 3: Style (Late Layers, 75-100%)
+    # 全体的な芸術的解釈・スタイルを制御
+    style_abstraction: 1.0
+
+  # --------- 2. UNet モデル チューナー ---------
+  unet:
+    # UNet全体の基本スケール
+    base_scale: 1.0
+
+    # --- INPUT BLOCKS: 構造とコンポジション ---
+    # 空間のジオメトリ、高解像度のレイアウト (IN: 0, 1)
+    IN_Layout_Geometry: 1.0
+    
+    # 全体的な形状と構図、対象の被写体と構造 (IN: 2, 3, 4, 5)
+    IN_Perspective_Masses: 1.0
+    IN_Subject_Identity: 1.0
+    
+    # 高レベルな意味的構成 (IN: 6, 7, 8)
+    IN_Global_Composition: 1.0
+
+    # --- MIDDLE BLOCK: コア ---
+    # 中心となる意味処理 (MID: 9)
+    MID_Core_Concept: 1.0
+
+    # --- OUTPUT BLOCKS: スタイルとレンダリング ---
+    # 芸術的なスタイル、メディウムの特徴 (OUT: 10, 11)
+    OUT_Art_Style_Medium: 1.0
+    
+    # 質感、物体の材質感 (OUT: 12)
+    OUT_Material_Substance: 1.0
+    
+    # 照明、雰囲気 (OUT: 13, 14)
+    OUT_Lighting_Atmosphere: 1.0
+    
+    # 影、奥行き感 (OUT: 15)
+    OUT_Shadows_Depth: 1.0
+    
+    # 高周波成分のディテール、テクスチャや布の質感 (OUT: 16, 17)
+    OUT_Texture_Details: 1.0
+    
+    # 最終的なシャープネス (OUT: 18)
+    OUT_Final_Sharpness: 1.0

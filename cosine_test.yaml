@@ -1,0 +1,9 @@
+models:
+  - left: "test_base.safetensors"
+    right: "test_mbw.safetensors"
+    strategy: "cosine_a"
+    velocity: 0.5
+  - left: "test_base.safetensors"
+    right: "test_mbw.safetensors"
+    strategy: "cosine_b"
+    velocity: 0.5

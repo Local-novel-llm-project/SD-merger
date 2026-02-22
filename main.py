@@ -1,31 +1,25 @@
-"""SD モデルの差分計算とマージツール。
-
-YAML 設定ファイルに基づき、複数の Stable Diffusion モデル間の
-差分計算・マージを行い、結果を safetensors 形式で保存する。
-"""
-
 import os
 import sys
-
-import torch
+import json
 import logging
 import argparse
 
+import torch
+import sd_mecha
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.progress import Progress
 
 from module.calc_method import get_calculation_strategy
 from module.calc_target import (
     get_normalization_calculation_strategy,
     get_target_calculation_strategy,
 )
-from module.const import SDKeyWrapper
-from module.utility import (
-    generate_filename,
-    load_model,
-    load_yaml_config,
-    save_model,
+from module.utility import generate_filename, load_yaml_config
+from module.extension_manager import (
+    load_extensions,
+    run_pre_config_hooks,
+    run_pre_merge_hooks,
+    run_post_merge_hooks,
 )
 
 # ロギングの設定
@@ -38,118 +32,121 @@ logging.basicConfig(
 console = Console()
 
 
+@sd_mecha.merge_method
+def scale_tensor(
+    a: sd_mecha.Parameter(torch.Tensor), scale: sd_mecha.Parameter(torch.Tensor) = 1.0
+) -> sd_mecha.Return(torch.Tensor):
+    return a * scale
+
+
 def main(config_path: str, output_dir: str) -> None:
-    """メイン処理。設定ファイルに従いモデルのマージを実行する。
+    """メイン処理。設定ファイルに従いモデルのマージを sd-mecha レシピとして構築して実行する。
 
     Args:
         config_path: YAML 設定ファイルのパス。
         output_dir: 出力ディレクトリのパス。
     """
+    # 設定を読み込み、拡張機能による事前加工（MBWの解決など）を行う
     config = load_yaml_config(config_path)
+    config = run_pre_config_hooks(config)
 
     target_model_path = config.get("target_model")
     if target_model_path:
-        target_model = load_model(target_model_path)
+        recipe = sd_mecha.model(target_model_path)
     else:
-        target_model = None
+        recipe = None
 
     models = config.get("models", [])
     if not models:
         logging.error("設定ファイルにモデルが指定されていません。")
         return
 
-    with Progress(console=console) as progress:
-        task = progress.add_task("[cyan]モデルを処理中...", total=len(models))
+    # SDXL キーの自動変換などの機能は sd-mecha がモデルコンフィグを自動推論して適用するため
+    # 以前のような use_sdxl_keys フラグの手動管理は基本不要になります。
 
-        for model_config in models:
-            # 必須フィールドのバリデーション
-            required_fields = ["left", "right", "velocity", "strategy"]
-            missing = [f for f in required_fields if f not in model_config]
-            if missing:
-                logging.error(f"モデル設定に必須フィールドが不足しています: {missing}")
-                sys.exit(1)
+    for model_config in models:
+        # 必須フィールドのバリデーション
+        required_fields = ["left", "right", "velocity", "strategy"]
+        missing = [f for f in required_fields if f not in model_config]
+        if missing:
+            logging.error(f"モデル設定に必須フィールドが不足しています: {missing}")
+            sys.exit(1)
 
-            left_model_path = model_config["left"]
-            right_model_path = model_config["right"]
-            target_velocity = model_config["velocity"]
-            left_right_velocity = model_config.get("left_right_velocity", 1.0)
-            strategy_name = model_config["strategy"]
-            key_patterns = model_config.get("key_patterns", None)
-            replace_with = model_config.get("replace_with", None)
-            target_strategy_name = model_config.get("target_strategy", "addition")
-            normalization_strategy_name = model_config.get("normalization_strategy", "none")
+        left_node = sd_mecha.model(model_config["left"])
+        right_node = sd_mecha.model(model_config["right"])
+        target_velocity = model_config["velocity"]
+        left_right_velocity = model_config.get("left_right_velocity", 1.0)
+        strategy_name = model_config["strategy"]
+        key_patterns = model_config.get("key_patterns", None)
+        replace_with = model_config.get("replace_with", None)
+        target_strategy_name = model_config.get("target_strategy", "addition")
+        normalization_strategy_name = model_config.get("normalization_strategy", "none")
 
-            strategy = get_calculation_strategy(strategy_name, replace_with)
-            target_strategy = get_target_calculation_strategy(target_strategy_name)
-            normalization_strategy = get_normalization_calculation_strategy(normalization_strategy_name)
-
-            # SDXL キー判定: target_model があればその設定を使用、なければ True をデフォルトに
-            use_sdxl_keys = target_model.use_sdxl_keys if target_model is not None else True
-
-            if not key_patterns:
-                if target_model is None:
-                    logging.error("target_model と key_patterns の両方が未指定です。どちらかを指定してください。")
-                    sys.exit(1)
-                keys_output_path = os.path.join(output_dir, "available_keys.txt")
-                os.makedirs(output_dir, exist_ok=True)
-                with open(keys_output_path, "w", encoding="utf-8") as f:
-                    f.write("追加可能なキー:\n")
-                    for key in target_model.keys():
-                        f.write(f"{key}: {list(target_model[key].shape)}\n")
-                logging.info(
-                    f"設定ファイルにキーのパターンが指定されていません。"
-                    f"追加可能なキーが {keys_output_path} に書き出されました。終了します。"
+        if not key_patterns:
+            if recipe is None:
+                logging.error(
+                    "target_model と key_patterns の両方が未指定です。どちらかを指定してください。"
                 )
                 sys.exit(1)
+            # 現在は sd-mecha が全キーを走査するため、必要であれば事前検出などは別に行う必要があります。
+            # プロジェクトの互換性維持のためここは一度エラーにします。
+            logging.error(
+                'key_patterns の指定は必須です。(全キーを指定する場合は "." 等を指定)'
+            )
+            sys.exit(1)
 
-            left_model = load_model(left_model_path, use_sdxl_keys=use_sdxl_keys)
-            right_model = load_model(right_model_path, use_sdxl_keys=use_sdxl_keys)
+        calc_func = get_calculation_strategy(strategy_name, replace_with)
+        target_func = get_target_calculation_strategy(target_strategy_name)
+        norm_func = get_normalization_calculation_strategy(normalization_strategy_name)
 
-            if target_model is not None:
-                # 対象レイヤーに一致するキー数で進捗バーを設定
-                matching_keys = [k for k in target_model.keys() if any(pat in k for pat in key_patterns)]
-                task_merge = progress.add_task(
-                    "[cyan]マージ中...", total=len(matching_keys) if matching_keys else len(target_model.keys())
+        patterns_json = json.dumps(key_patterns)
+
+        # left/right の差分計算ノード
+        diff_node = calc_func(
+            left_node,
+            right_node,
+            velocity=left_right_velocity,
+            key_patterns_json=patterns_json,
+        )
+
+        if recipe is not None:
+            if target_strategy_name == "angle":
+                # angle は特殊で diff_l, diff_r を求める必要がある
+                diff_l = calc_func(
+                    left_node,
+                    recipe,
+                    velocity=left_right_velocity,
+                    key_patterns_json=patterns_json,
                 )
-
-                def update_callback():
-                    progress.update(task_merge, advance=1)
-
-                normalization_strategy.set_progress_callback(update_callback)
-                with torch.no_grad():
-                    final_model = SDKeyWrapper(
-                        normalization_strategy.calculate(
-                            target_model,
-                            left_model,
-                            right_model,
-                            target_strategy,
-                            strategy,
-                            left_right_velocity,
-                            target_velocity,
-                            key_patterns,
-                        ),
-                        use_sdxl_keys=use_sdxl_keys,
-                    )
+                diff_r = calc_func(
+                    right_node,
+                    recipe,
+                    velocity=left_right_velocity,
+                    key_patterns_json=patterns_json,
+                )
+                merged = target_func(
+                    recipe,
+                    diff_l=diff_l,
+                    diff_r=diff_r,
+                    left=left_node,
+                    right=right_node,
+                    key_patterns_json=patterns_json,
+                )
             else:
-                # ターゲットモデルがない場合、left/right の計算結果をそのまま使用
-                with torch.no_grad():
-                    result = strategy.calculate(
-                        left_model,
-                        right_model,
-                        left_right_velocity,
-                        key_patterns,
-                    )
-                    # target_velocity を in-place で適用（メモリ効率向上）
-                    for v in result.values():
-                        v.mul_(target_velocity)
-                    final_model = SDKeyWrapper(result, use_sdxl_keys=use_sdxl_keys)
+                merged = target_func(
+                    recipe,
+                    diff_node,
+                    velocity=target_velocity,
+                    key_patterns_json=patterns_json,
+                )
 
-            del left_model, right_model
-            # GPU メモリの明示的な解放
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            if norm_func is not None:
+                merged = norm_func(recipe, merged)
 
-            progress.update(task, advance=1)
+            recipe = merged
+        else:
+            # ターゲットモデルがない場合、left/right の計算結果をそのまま使用
+            recipe = scale_tensor(diff_node, scale=target_velocity)
 
     # 全モデル設定から代表名を取得してファイル名を生成
     first_left_name = os.path.basename(models[0]["left"])
@@ -157,17 +154,41 @@ def main(config_path: str, output_dir: str) -> None:
     output_filename = generate_filename(first_left_name, last_right_name)
     output_path = os.path.join(output_dir, output_filename)
     os.makedirs(output_dir, exist_ok=True)
-    save_model(final_model, output_path)
+
+    # pre_merge_hookの実行（カスタムレシピ変更用）
+    recipe = run_pre_merge_hooks(config, recipe)
+
+    logging.info(f"マージ処理を実行し、{output_path} に保存します...")
+    logging.info("sd-mecha がストリーミング処理を開始します。")
+    # sd-mecha によるストリーミングマージの実行
+    sd_mecha.set_log_level(logging.INFO)
+    sd_mecha.merge(recipe, output=output_path)
+    logging.info("マージが完了しました。")
+
+    # post_merge_hookの実行
+    run_post_merge_hooks(config, output_path)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="モデルの差分計算とマージツール")
-    parser.add_argument("-c", "--config", type=str, default="sd_config.yaml", help="設定ファイルのパス")
-    parser.add_argument("-o", "--output", type=str, default="./merged", help="出力ディレクトリのパス")
-    parser.add_argument("-d", "--debug", action="store_true", help="DEBUGログレベルを有効にする")
+    parser = argparse.ArgumentParser(
+        description="モデルの差分計算とマージツール (sd-mecha版)"
+    )
+    parser.add_argument(
+        "-c", "--config", type=str, default="sd_config.yaml", help="設定ファイルのパス"
+    )
+    parser.add_argument(
+        "-o", "--output", type=str, default="./merged", help="出力ディレクトリのパス"
+    )
+    parser.add_argument(
+        "-d", "--debug", action="store_true", help="DEBUGログレベルを有効にする"
+    )
     args = parser.parse_args()
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
+        sd_mecha.set_log_level(logging.DEBUG)
+
+    # 拡張機能の読み込み
+    load_extensions()
 
     main(args.config, args.output)
