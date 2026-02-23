@@ -1,6 +1,10 @@
 import os
+import sys
 import gradio as gr
 import logging
+
+# Ensure the project root is in sys.path so 'ui' can be imported
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from ui.components.mbw_each import render_mbw_each_tab
 from ui.components.multi_merge import render_multi_merge_tab
@@ -10,6 +14,8 @@ from ui.components.history import render_history_tab
 from module.history import save_history
 from ui.components.xyz_plot import render_xyz_plot_tab
 from ui.components.elemental_merge import render_elemental_merge_tab
+from ui.components.dice_roll import render_dice_roll_tab
+from ui.components.presets import render_presets_tab
 
 
 def create_ui():
@@ -195,6 +201,14 @@ def create_ui():
             # タブ 9: Visual MBW
             with gr.TabItem("Visual MBW"):
                 render_elemental_merge_tab()
+
+            # タブ 10: Let the Dice Roll
+            with gr.TabItem("Let the Dice Roll"):
+                render_dice_roll_tab()
+
+            # タブ 11: Presets
+            with gr.TabItem("Presets"):
+                render_presets_tab()
 
     return app
 

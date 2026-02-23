@@ -1,0 +1,178 @@
+import gradio as gr
+import os
+import random
+import yaml
+from module.generation import generate_image
+
+
+def render_dice_roll_tab():
+    gr.Markdown("### Let the Dice Roll (Random Merge Search)")
+    gr.Markdown(
+        "Generate a random MBW (Merge Block Weight) string and strategy to discover new model combinations automatically."
+    )
+
+    with gr.Row():
+        with gr.Column(scale=1):
+            model_a = gr.File(
+                label="Model A (Left)", file_types=[".safetensors", ".ckpt"]
+            )
+            model_b = gr.File(
+                label="Model B (Right)", file_types=[".safetensors", ".ckpt"]
+            )
+
+            with gr.Accordion("Randomization Constraints", open=True):
+                strat_options = gr.CheckboxGroup(
+                    label="Allowed Strategies",
+                    choices=[
+                        "addition",
+                        "subtraction",
+                        "multiplication",
+                        "mix",
+                        "cosineA",
+                        "smoothAdd",
+                        "tensor",
+                    ],
+                    value=["mix", "addition", "cosineA"],
+                )
+                alpha_min = gr.Slider(
+                    label="Minimum Velocity (Alpha)",
+                    minimum=0.0,
+                    maximum=1.0,
+                    value=0.1,
+                )
+                alpha_max = gr.Slider(
+                    label="Maximum Velocity (Alpha)",
+                    minimum=0.0,
+                    maximum=1.0,
+                    value=0.9,
+                )
+
+            with gr.Accordion("Generation Settings", open=False):
+                prompt = gr.Textbox(
+                    label="Prompt", value="A beautiful landscape, masterpiece"
+                )
+                negative_prompt = gr.Textbox(
+                    label="Negative Prompt", value="blurry, lowres"
+                )
+                width = gr.Slider(
+                    label="Width", minimum=256, maximum=1024, step=64, value=512
+                )
+                height = gr.Slider(
+                    label="Height", minimum=256, maximum=1024, step=64, value=512
+                )
+                fixed_seed = gr.Number(label="Seed", value=1337)
+
+            roll_btn = gr.Button("🎲 Roll the Dice!", variant="primary")
+
+        with gr.Column(scale=1):
+            output_image = gr.Image(label="Generated Result")
+            output_params = gr.JSON(label="Rolled Parameters")
+            output_log = gr.Textbox(label="Log", interactive=False)
+
+    def run_dice(ma, mb, allowed_strats, a_min, a_max, p, np, w, h, seed):
+        if not ma or not mb:
+            return None, {}, "Model A and Model B are required."
+        if not allowed_strats:
+            return None, {}, "Please select at least one strategy."
+
+        import sys
+
+        sys.path.insert(
+            0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        )
+        from main import main as merger_main
+        from module.history import save_history
+
+        # Roll strategy
+        strategy = random.choice(allowed_strats)
+
+        # Roll velocity
+        velocity = round(random.uniform(a_min, a_max), 3)
+
+        # Roll MBW
+        mbw = [round(random.uniform(a_min, a_max), 3) for _ in range(26)]
+        mbw_str = ",".join(map(str, mbw))
+
+        rolled_params = {"strategy": strategy, "velocity": velocity, "mbw": mbw_str}
+
+        # Config
+        tmp_dir = os.path.abspath("./merged/dice_tmp")
+        os.makedirs(tmp_dir, exist_ok=True)
+
+        config = {
+            "target_model": ma.name,
+            "models": [
+                {
+                    "left": ma.name,
+                    "right": mb.name,
+                    "strategy": strategy,
+                    "velocity": velocity,
+                    "mbw": mbw_str,
+                    "key_patterns": ["."],
+                }
+            ],
+        }
+
+        cfg_file = os.path.join(tmp_dir, "dice_cfg.yaml")
+        with open(cfg_file, "w") as f:
+            yaml.dump(config, f)
+
+        out_model = os.path.join(tmp_dir, "dice_result.safetensors")
+        log = f"Rolled: Strategy={strategy}, Velocity={velocity}\nMerging...\n"
+
+        try:
+            merger_main(cfg_file, out_model)
+
+            # Use real merged file if merger_main uses a timestamp
+            import glob
+
+            files = glob.glob(os.path.join(tmp_dir, "*.safetensors"))
+            if files:
+                out_model = max(files, key=os.path.getctime)
+
+            save_history(
+                {
+                    "config": config,
+                    "output_name": out_model,
+                    "status": "Dice Roll Success",
+                }
+            )
+
+            log += "Generating image...\n"
+            img = generate_image(
+                model_path=out_model,
+                prompt=p,
+                negative_prompt=np,
+                width=w,
+                height=h,
+                steps=20,
+                cfg=7.0,
+                sampler_name="euler",
+                scheduler="normal",
+                seed=seed,
+            )
+
+            if img:
+                return img, rolled_params, log + "Done!"
+            else:
+                return None, rolled_params, log + "Image generation failed."
+
+        except Exception as e:
+            return None, rolled_params, f"Error: {str(e)}"
+
+    roll_btn.click(
+        run_dice,
+        inputs=[
+            model_a,
+            model_b,
+            strat_options,
+            alpha_min,
+            alpha_max,
+            prompt,
+            negative_prompt,
+            width,
+            height,
+            fixed_seed,
+        ],
+        outputs=[output_image, output_params, output_log],
+    )
