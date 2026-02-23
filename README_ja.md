@@ -1,43 +1,92 @@
 # sd-merger
+
 [English](README.md) | *日本語*
 
+Stable Diffusionモデルのマージを行うコマンドラインツールです。
 
-sd-merger はSDをベクトルマージするための小さなツールです。
+
+## 特徴
+
+- 複数のマージ戦略: subtraction, addition, multiplication, average, replace
+- MBW (Merge Block Weight) によるレイヤー単位のマージ
+- 拡張機能システムによるカスタムマージアルゴリズム
+- LoRAの抽出とマージ機能
+- Stable Diffusion 1.5 と SDXL に対応
 
 
 ## インストール
 
-1. リポジトリのクローン
-   ```bash
-   git clone https://github.com/Local-novel-llm-project/SD-merger
-   cd SD-merger
-   ```
-
-1. (オプション、推奨) Python仮想環境の作成とアクティベート
-   ```bash
-   # for example, we use venv
-   python -m venv venv
-   ```
-
-1. pipを使って依存関係のインストール
-   ```bash
-   pip install -r requirements.txt
-   ```
-
+```bash
+git clone https://github.com/Local-novel-llm-project/SD-merger
+cd SD-merger
+pip install -r requirements.txt
+```
 
 ## 使い方
 
 ```bash
-python main.py -c <your yaml config>.yaml
+python main.py -c example/example.yaml
 ```
 
 ## 設定
 
-sd-merger はマージ方法の設定にYAMLフォーマットを使用しています。
-設定ファイルの例は `example` フォルダ以下にあります。
+YAML設定ファイルを作成:
 
-各設定の詳細は設定ファイル例の中にコメントで書いています。
+```yaml
+target_model: "ベースモデル"
+models:
+  - left: "モデルA"
+    right: "モデルB"
+    velocity: 1.0
+    strategy: "addition"
+    key_patterns:
+      - "."
+```
 
+### 主要パラメータ
+
+| パラメータ | 説明 |
+|-----------|------|
+| `target_model` | マージ先のベースモデル |
+| `left` / `right` | マージするモデル |
+| `velocity` | マージ強度 (0.0-1.0) |
+| `strategy` | マージアルゴリズム |
+| `key_patterns` | 対象レイヤー |
+
+### 利用可能な戦略
+
+- `subtraction` - 差分を計算
+- `addition` - モデルを加算
+- `multiplication` - 重みを乗算
+- `average` - モデルをブレンド
+- `replace` - 直接置換
+
+## 拡張機能
+
+拡張機能で追加機能を有効化:
+
+| 拡張機能 | 説明 |
+|---------|------|
+| `supermerger_mbw` | レイヤー単位のMerge Block Weight制御 |
+| `lora_ops` | LoRAの抽出とマージ |
+| `resize_lora` | LoRAランクのリサイズ |
+| `quantum_merge` | 高度なマージアルゴリズム |
+
+### 拡張機能の開発
+
+`extensions/` ディレクトリに独自のフォルダを作成し、`__init__.py` に `setup()` 関数を定義:
+
+```python
+from module.extension_manager import register_strategy, register_pre_merge_hook
+from sd_mecha import merge_method, Parameter, Return
+
+@merge_method
+def my_strategy(a, b, velocity=1.0, **kwargs):
+    return (a + b) * velocity * 0.5
+
+def setup():
+    register_strategy("my_algorithm", my_strategy)
+```
 
 ## License
 

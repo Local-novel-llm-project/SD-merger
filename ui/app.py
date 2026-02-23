@@ -4,6 +4,12 @@ import logging
 
 from ui.components.mbw_each import render_mbw_each_tab
 from ui.components.multi_merge import render_multi_merge_tab
+from ui.components.generation import render_generation_tab
+from ui.components.analysis import render_analysis_tab
+from ui.components.history import render_history_tab
+from module.history import save_history
+from ui.components.xyz_plot import render_xyz_plot_tab
+from ui.components.elemental_merge import render_elemental_merge_tab
 
 
 def create_ui():
@@ -127,8 +133,18 @@ def create_ui():
                         # 実行
                         out_dir = os.path.abspath("./merged")
                         merger_main(tmp_cfg, out_dir)
+                        save_history(
+                            {"config": config, "output_name": out, "status": "Success"}
+                        )
                         return f"Merge completed successfully. Saved to {out_dir}"
                     except Exception as e:
+                        save_history(
+                            {
+                                "config": config,
+                                "output_name": out,
+                                "status": f"Failed: {e}",
+                            }
+                        )
                         return f"Error during merge: {e}"
 
                 merge_btn.click(
@@ -160,12 +176,25 @@ def create_ui():
             with gr.TabItem("Multi-Merge"):
                 render_multi_merge_tab()
 
-            # タブ 5: XYZ Plot
+            # タブ 5: Generate & Test
+            with gr.TabItem("Generate & Test"):
+                render_generation_tab()
+
+            # タブ 6: Analysis
+            with gr.TabItem("Analysis"):
+                render_analysis_tab()
+
+            # タブ 7: History
+            with gr.TabItem("History"):
+                render_history_tab()
+
+            # タブ 8: XYZ Plot
             with gr.TabItem("XYZ Plot"):
-                gr.Markdown("### XY/XYZ Plot Generation")
-                gr.Markdown(
-                    "*Requires Stable Diffusion WebUI environment for image generation.*"
-                )
+                render_xyz_plot_tab()
+
+            # タブ 9: Visual MBW
+            with gr.TabItem("Visual MBW"):
+                render_elemental_merge_tab()
 
     return app
 
