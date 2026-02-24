@@ -1,15 +1,14 @@
 import os
 import sys
 import torch
+import logging
 
-comfy_dir = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "refrence", "ComfyUI")
-)
-if comfy_dir not in sys.path:
-    sys.path.append(comfy_dir)
 
-import folder_paths
-import nodes
+def _get_comfy_dir():
+    """Returns the path to the ComfyUI reference directory."""
+    return os.environ.get(
+        "COMFYUI_DIR", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "refrence", "ComfyUI"))
+    )
 
 
 def generate_image(
@@ -27,6 +26,21 @@ def generate_image(
     """
     Generates an image using the ComfyUI backend.
     """
+    comfy_dir = _get_comfy_dir()
+    if not os.path.exists(comfy_dir):
+        logging.error(f"ComfyUI directory not found at {comfy_dir}. Please install it to use generation testing.")
+        return None
+
+    if comfy_dir not in sys.path:
+        sys.path.append(comfy_dir)
+
+    try:
+        import folder_paths
+        import nodes
+    except ImportError as e:
+        logging.error(f"Failed to import ComfyUI modules from {comfy_dir}: {e}")
+        return None
+
     try:
         # Avoid model not found errors by temporarily adding the directory to ComfyUI's search path
         model_dir = os.path.dirname(model_path)
@@ -40,16 +54,14 @@ def generate_image(
         ckpt_loader = nodes.CheckpointLoaderSimple()
         model, clip, vae = ckpt_loader.load_checkpoint(ckpt_name=model_name)
 
-        print(f"Encoding prompts...")
+        print("Encoding prompts...")
         clip_pos = nodes.CLIPTextEncode().encode(clip=clip, text=prompt)[0]
         clip_neg = nodes.CLIPTextEncode().encode(clip=clip, text=negative_prompt)[0]
 
         print(f"Generating empty latent ({width}x{height})...")
-        latent = nodes.EmptyLatentImage().generate(
-            width=width, height=height, batch_size=1
-        )[0]
+        latent = nodes.EmptyLatentImage().generate(width=width, height=height, batch_size=1)[0]
 
-        print(f"Sampling...")
+        print("Sampling...")
         ksampler = nodes.KSampler()
         samples = ksampler.sample(
             model=model,
@@ -64,7 +76,7 @@ def generate_image(
             denoise=1.0,
         )[0]
 
-        print(f"Decoding VAE...")
+        print("Decoding VAE...")
         images = nodes.VAEDecode().decode(samples=samples, vae=vae)[0]
 
         # Convert tensor to PIL Image
