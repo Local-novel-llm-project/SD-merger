@@ -16,6 +16,7 @@ from ui.components.xyz_plot import render_xyz_plot_tab
 from ui.components.elemental_merge import render_elemental_merge_tab
 from ui.components.dice_roll import render_dice_roll_tab
 from ui.components.presets import render_presets_tab
+from ui.components.lora_ops import render_lora_ops_tab
 
 
 def create_ui():
@@ -30,9 +31,7 @@ def create_ui():
             with gr.TabItem("Merge Models"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        model_a = gr.File(
-                            label="Model A (Left)", file_types=[".safetensors", ".ckpt"]
-                        )
+                        model_a = gr.File(label="Model A (Left)", file_types=[".safetensors", ".ckpt"])
                         model_b = gr.File(
                             label="Model B (Right)",
                             file_types=[".safetensors", ".ckpt"],
@@ -86,12 +85,8 @@ def create_ui():
                             label="Merge Block Weight (MBW)",
                             placeholder="e.g. 1,0.5,0.5,0...",
                         )
-                        bake_in_vae = gr.File(
-                            label="Bake in VAE", file_types=[".safetensors", ".pt"]
-                        )
-                        output_name = gr.Textbox(
-                            label="Output Filename", value="merged_model.safetensors"
-                        )
+                        bake_in_vae = gr.File(label="Bake in VAE", file_types=[".safetensors", ".pt"])
+                        output_name = gr.Textbox(label="Output Filename", value="merged_model.safetensors")
 
                 merge_btn = gr.Button("Merge Models", variant="primary")
                 merge_output = gr.Textbox(label="Output Log")
@@ -130,18 +125,14 @@ def create_ui():
                         config["bake_in_vae"] = vae.name
 
                     try:
-                        with tempfile.NamedTemporaryFile(
-                            "w", delete=False, suffix=".yaml"
-                        ) as f:
+                        with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
                             yaml.dump(config, f)
                             tmp_cfg = f.name
 
                         # 実行
                         out_dir = os.path.abspath("./merged")
                         merger_main(tmp_cfg, out_dir)
-                        save_history(
-                            {"config": config, "output_name": out, "status": "Success"}
-                        )
+                        save_history({"config": config, "output_name": out, "status": "Success"})
                         return f"Merge completed successfully. Saved to {out_dir}"
                     except Exception as e:
                         save_history(
@@ -175,8 +166,7 @@ def create_ui():
 
             # タブ 3: LoRA Operations
             with gr.TabItem("LoRA Ops"):
-                gr.Markdown("### Extract & Merge LoRAs")
-                gr.Markdown("*UI implementation pending...*")
+                render_lora_ops_tab()
 
             # タブ 4: Multi-Merge (Batch)
             with gr.TabItem("Multi-Merge"):

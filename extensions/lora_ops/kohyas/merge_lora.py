@@ -7,6 +7,7 @@ from safetensors.torch import load_file, save_file
 from library import sai_model_spec, train_util
 from scripts.kohyas import model_util, lora
 
+
 def load_state_dict(file_name, dtype):
     if os.path.splitext(file_name)[1] == ".safetensors":
         sd = load_file(file_name)
@@ -62,7 +63,7 @@ def merge_to_sd_model(text_encoder, unet, models, ratios, merge_dtype):
         print(f"loading: {model}")
         lora_sd, _ = load_state_dict(model, merge_dtype)
 
-        print(f"merging...")
+        print("merging...")
         for key in lora_sd.keys():
             if "lora_down" in key:
                 up_key = key.replace("lora_down", "lora_up")
@@ -96,7 +97,9 @@ def merge_to_sd_model(text_encoder, unet, models, ratios, merge_dtype):
                     weight = (
                         weight
                         + ratio
-                        * (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3)
+                        * (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2))
+                        .unsqueeze(2)
+                        .unsqueeze(3)
                         * scale
                     )
                 else:
@@ -152,7 +155,7 @@ def merge_lora_models(models, ratios, merge_dtype, concat=False, shuffle=False):
         print(f"dim: {list(set(dims.values()))}, alpha: {list(set(alphas.values()))}")
 
         # merge
-        print(f"merging...")
+        print("merging...")
         for key in lora_sd.keys():
             if "alpha" in key:
                 continue
@@ -169,12 +172,12 @@ def merge_lora_models(models, ratios, merge_dtype, concat=False, shuffle=False):
             alpha = alphas[lora_module_name]
 
             scale = math.sqrt(alpha / base_alpha) * ratio
-            scale = abs(scale) if "lora_up" in key else scale # マイナスの重みに対応する。
+            scale = abs(scale) if "lora_up" in key else scale  # マイナスの重みに対応する。
 
             if key in merged_sd:
                 assert (
                     merged_sd[key].size() == lora_sd[key].size() or concat_dim is not None
-                ), f"weights shape mismatch merging v1 and v2, different dims? / 重みのサイズが合いません。v1とv2、または次元数の異なるモデルはマージできません"
+                ), "weights shape mismatch merging v1 and v2, different dims? / 重みのサイズが合いません。v1とv2、または次元数の異なるモデルはマージできません"
                 if concat_dim is not None:
                     merged_sd[key] = torch.cat([merged_sd[key], lora_sd[key] * scale], dim=concat_dim)
                 else:
@@ -192,7 +195,7 @@ def merge_lora_models(models, ratios, merge_dtype, concat=False, shuffle=False):
             dim = merged_sd[key_down].shape[0]
             perm = torch.randperm(dim)
             merged_sd[key_down] = merged_sd[key_down][perm]
-            merged_sd[key_up] = merged_sd[key_up][:,perm]
+            merged_sd[key_up] = merged_sd[key_up][:, perm]
 
     print("merged model")
     print(f"dim: {list(set(base_dims.values()))}, alpha: {list(set(base_alphas.values()))}")
@@ -220,7 +223,9 @@ def merge_lora_models(models, ratios, merge_dtype, concat=False, shuffle=False):
 
 
 def merge(args):
-    assert len(args.models) == len(args.ratios), f"number of models must be equal to number of ratios / モデルの数と重みの数は合わせてください"
+    assert len(args.models) == len(
+        args.ratios
+    ), "number of models must be equal to number of ratios / モデルの数と重みの数は合わせてください"
 
     def str_to_dtype(p):
         if p == "float":
@@ -248,10 +253,20 @@ def merge(args):
         else:
             merged_from = sai_model_spec.build_merged_from([args.sd_model] + args.models)
             title = os.path.splitext(os.path.basename(args.save_to))[0]
+            is_v_prediction = args.v2
+            if args.v2:
+                base_metadata = sai_model_spec.load_metadata_from_safetensors(args.sd_model)
+                if "modelspec.prediction_type" in base_metadata:
+                    is_v_prediction = base_metadata["modelspec.prediction_type"] == sai_model_spec.PRED_TYPE_V
+                else:
+                    print(
+                        "Cannot determine if model is for v-prediction, so save metadata as v-prediction / modelがv-prediction用か否か不明なため、仮にv-prediction用としてmetadataを保存します"
+                    )
+
             sai_metadata = sai_model_spec.build_metadata(
                 None,
                 args.v2,
-                args.v2,
+                is_v_prediction,
                 False,
                 False,
                 False,
@@ -260,11 +275,6 @@ def merge(args):
                 merged_from=merged_from,
                 is_stable_diffusion_ckpt=True,
             )
-            if args.v2:
-                # TODO read sai modelspec
-                print(
-                    "Cannot determine if model is for v-prediction, so save metadata as v-prediction / modelがv-prediction用か否か不明なため、仮にv-prediction用としてmetadataを保存します"
-                )
 
         print(f"saving SD model to: {args.save_to}")
         model_util.save_stable_diffusion_checkpoint(
@@ -273,7 +283,7 @@ def merge(args):
     else:
         state_dict, metadata, v2 = merge_lora_models(args.models, args.ratios, merge_dtype, args.concat, args.shuffle)
 
-        print(f"calculating hashes and creating metadata...")
+        print("calculating hashes and creating metadata...")
 
         model_hash, legacy_hash = train_util.precalculate_safetensors_hashes(state_dict, metadata)
         metadata["sshs_model_hash"] = model_hash
@@ -282,14 +292,19 @@ def merge(args):
         if not args.no_metadata:
             merged_from = sai_model_spec.build_merged_from(args.models)
             title = os.path.splitext(os.path.basename(args.save_to))[0]
-            sai_metadata = sai_model_spec.build_metadata(
-                state_dict, v2, v2, False, True, False, time.time(), title=title, merged_from=merged_from
-            )
+            is_v_prediction = v2
             if v2:
-                # TODO read sai modelspec
-                print(
-                    "Cannot determine if LoRA is for v-prediction, so save metadata as v-prediction / LoRAがv-prediction用か否か不明なため、仮にv-prediction用としてmetadataを保存します"
-                )
+                lora_metadata = sai_model_spec.load_metadata_from_safetensors(args.models[0]) if args.models else {}
+                if "modelspec.prediction_type" in lora_metadata:
+                    is_v_prediction = lora_metadata["modelspec.prediction_type"] == sai_model_spec.PRED_TYPE_V
+                else:
+                    print(
+                        "Cannot determine if LoRA is for v-prediction, so save metadata as v-prediction / LoRAがv-prediction用か否か不明なため、仮にv-prediction用としてmetadataを保存します"
+                    )
+
+            sai_metadata = sai_model_spec.build_metadata(
+                state_dict, v2, is_v_prediction, False, True, False, time.time(), title=title, merged_from=merged_from
+            )
             metadata.update(sai_metadata)
 
         print(f"saving model to: {args.save_to}")
@@ -298,7 +313,9 @@ def merge(args):
 
 def setup_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--v2", action="store_true", help="load Stable Diffusion v2.x model / Stable Diffusion 2.xのモデルを読み込む")
+    parser.add_argument(
+        "--v2", action="store_true", help="load Stable Diffusion v2.x model / Stable Diffusion 2.xのモデルを読み込む"
+    )
     parser.add_argument(
         "--save_precision",
         type=str,
@@ -320,10 +337,16 @@ def setup_parser() -> argparse.ArgumentParser:
         help="Stable Diffusion model to load: ckpt or safetensors file, merge LoRA models if omitted / 読み込むモデル、ckptまたはsafetensors。省略時はLoRAモデル同士をマージする",
     )
     parser.add_argument(
-        "--save_to", type=str, default=None, help="destination file name: ckpt or safetensors file / 保存先のファイル名、ckptまたはsafetensors"
+        "--save_to",
+        type=str,
+        default=None,
+        help="destination file name: ckpt or safetensors file / 保存先のファイル名、ckptまたはsafetensors",
     )
     parser.add_argument(
-        "--models", type=str, nargs="*", help="LoRA models to merge: ckpt or safetensors file / マージするLoRAモデル、ckptまたはsafetensors"
+        "--models",
+        type=str,
+        nargs="*",
+        help="LoRA models to merge: ckpt or safetensors file / マージするLoRAモデル、ckptまたはsafetensors",
     )
     parser.add_argument("--ratios", type=float, nargs="*", help="ratios for each model / それぞれのLoRAモデルの比率")
     parser.add_argument(
@@ -341,10 +364,9 @@ def setup_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--shuffle",
         action="store_true",
-        help="shuffle lora weight./ "
-        + "LoRAの重みをシャッフルする",
+        help="shuffle lora weight./ " + "LoRAの重みをシャッフルする",
     )
-    
+
     return parser
 
 

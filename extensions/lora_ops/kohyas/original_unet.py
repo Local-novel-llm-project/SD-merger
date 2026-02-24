@@ -228,7 +228,9 @@ class FlashAttentionFunction(torch.autograd.Function):
 
                 new_row_sums = exp_row_max_diff * row_sums + exp_block_row_max_diff * block_row_sums
 
-                oc.mul_((row_sums / new_row_sums) * exp_row_max_diff).add_((exp_block_row_max_diff / new_row_sums) * exp_values)
+                oc.mul_((row_sums / new_row_sums) * exp_row_max_diff).add_(
+                    (exp_block_row_max_diff / new_row_sums) * exp_values
+                )
 
                 row_maxes.copy_(new_row_maxes)
                 row_sums.copy_(new_row_sums)
@@ -626,11 +628,7 @@ class CrossAttention(nn.Module):
                 hidden_states=hidden_states, context=context, mask=mask, **kwargs
             )
             return self.processor(
-                attn=self,
-                hidden_states=hidden_states,
-                encoder_hidden_states=context,
-                attention_mask=mask,
-                **kwargs
+                attn=self, hidden_states=hidden_states, encoder_hidden_states=context, attention_mask=mask, **kwargs
             )
         if self.use_memory_efficient_attention_xformers:
             return self.forward_memory_efficient_xformers(hidden_states, context, mask)
@@ -641,8 +639,13 @@ class CrossAttention(nn.Module):
 
         query = self.to_q(hidden_states)
         context = context if context is not None else hidden_states
-        key = self.to_k(context)
-        value = self.to_v(context)
+
+        context_k, context_v = context, context
+        if getattr(self, "hypernetwork", None) is not None:
+            context_k, context_v = self.hypernetwork(hidden_states, context)
+
+        key = self.to_k(context_k)
+        value = self.to_v(context_v)
 
         query = self.reshape_heads_to_batch_dim(query)
         key = self.reshape_heads_to_batch_dim(key)
@@ -661,7 +664,7 @@ class CrossAttention(nn.Module):
             key = key.float()
 
         attention_scores = torch.baddbmm(
-            torch.empty(query.shape[0], query.shape[1], key.shape[1], dtype=query.dtype, device=query.device),
+            torch.zeros(query.shape[0], query.shape[1], key.shape[1], dtype=query.dtype, device=query.device),
             query,
             key.transpose(-1, -2),
             beta=0,
@@ -679,7 +682,6 @@ class CrossAttention(nn.Module):
         hidden_states = self.reshape_batch_dim_to_heads(hidden_states)
         return hidden_states
 
-    # TODO support Hypernetworks
     def forward_memory_efficient_xformers(self, x, context=None, mask=None):
         import xformers.ops
 
@@ -687,8 +689,13 @@ class CrossAttention(nn.Module):
         q_in = self.to_q(x)
         context = context if context is not None else x
         context = context.to(x.dtype)
-        k_in = self.to_k(context)
-        v_in = self.to_v(context)
+
+        context_k, context_v = context, context
+        if getattr(self, "hypernetwork", None) is not None:
+            context_k, context_v = self.hypernetwork(x, context)
+
+        k_in = self.to_k(context_k)
+        v_in = self.to_v(context_v)
 
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b n h d", h=h), (q_in, k_in, v_in))
         del q_in, k_in, v_in
@@ -713,8 +720,13 @@ class CrossAttention(nn.Module):
         q = self.to_q(x)
         context = context if context is not None else x
         context = context.to(x.dtype)
-        k = self.to_k(context)
-        v = self.to_v(context)
+
+        context_k, context_v = context, context
+        if getattr(self, "hypernetwork", None) is not None:
+            context_k, context_v = self.hypernetwork(x, context)
+
+        k = self.to_k(context_k)
+        v = self.to_v(context_v)
         del context, x
 
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v))
@@ -731,8 +743,13 @@ class CrossAttention(nn.Module):
         q_in = self.to_q(x)
         context = context if context is not None else x
         context = context.to(x.dtype)
-        k_in = self.to_k(context)
-        v_in = self.to_v(context)
+
+        context_k, context_v = context, context
+        if getattr(self, "hypernetwork", None) is not None:
+            context_k, context_v = self.hypernetwork(x, context)
+
+        k_in = self.to_k(context_k)
+        v_in = self.to_v(context_v)
 
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q_in, k_in, v_in))
         del q_in, k_in, v_in
@@ -744,13 +761,14 @@ class CrossAttention(nn.Module):
         out = self.to_out[0](out)
         return out
 
+
 def translate_attention_names_from_diffusers(
     hidden_states: torch.FloatTensor,
     context: Optional[torch.FloatTensor] = None,
     mask: Optional[torch.FloatTensor] = None,
     # HF naming
     encoder_hidden_states: Optional[torch.FloatTensor] = None,
-    attention_mask: Optional[torch.FloatTensor] = None
+    attention_mask: Optional[torch.FloatTensor] = None,
 ):
     # translate from hugging face diffusers
     context = context if context is not None else encoder_hidden_states
@@ -759,6 +777,7 @@ def translate_attention_names_from_diffusers(
     mask = mask if mask is not None else attention_mask
 
     return hidden_states, context, mask
+
 
 # feedforward
 class GEGLU(nn.Module):
@@ -809,7 +828,12 @@ class FeedForward(nn.Module):
 
 class BasicTransformerBlock(nn.Module):
     def __init__(
-        self, dim: int, num_attention_heads: int, attention_head_dim: int, cross_attention_dim: int, upcast_attention: bool = False
+        self,
+        dim: int,
+        num_attention_heads: int,
+        attention_head_dim: int,
+        cross_attention_dim: int,
+        upcast_attention: bool = False,
     ):
         super().__init__()
 
@@ -879,7 +903,9 @@ class Transformer2DModel(nn.Module):
         inner_dim = num_attention_heads * attention_head_dim
         self.use_linear_projection = use_linear_projection
 
-        self.norm = torch.nn.GroupNorm(num_groups=TRANSFORMER_NORM_NUM_GROUPS, num_channels=in_channels, eps=1e-6, affine=True)
+        self.norm = torch.nn.GroupNorm(
+            num_groups=TRANSFORMER_NORM_NUM_GROUPS, num_channels=in_channels, eps=1e-6, affine=True
+        )
 
         if use_linear_projection:
             self.proj_in = nn.Linear(in_channels, inner_dim)
@@ -1850,7 +1876,9 @@ class InferUNet2DConditionModel:
                     org_dtype = sample.dtype
                     if org_dtype == torch.bfloat16:
                         sample = sample.to(torch.float32)
-                    sample = F.interpolate(sample, scale_factor=self.ds_ratio, mode="bicubic", align_corners=False).to(org_dtype)
+                    sample = F.interpolate(sample, scale_factor=self.ds_ratio, mode="bicubic", align_corners=False).to(
+                        org_dtype
+                    )
 
             # downblockはforwardで必ずencoder_hidden_statesを受け取るようにしても良さそうだけど、
             # まあこちらのほうがわかりやすいかもしれない

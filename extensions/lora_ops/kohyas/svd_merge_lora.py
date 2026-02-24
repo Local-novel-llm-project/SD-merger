@@ -1,4 +1,3 @@
-import math
 import argparse
 import os
 import time
@@ -20,7 +19,7 @@ def load_state_dict(file_name, dtype):
         metadata = {}
 
     for key in list(sd.keys()):
-        if type(sd[key]) == torch.Tensor:
+        if isinstance(sd[key], torch.Tensor):
             sd[key] = sd[key].to(dtype)
 
     return sd, metadata
@@ -29,7 +28,7 @@ def load_state_dict(file_name, dtype):
 def save_to_file(file_name, state_dict, dtype, metadata):
     if dtype is not None:
         for key in list(state_dict.keys()):
-            if type(state_dict[key]) == torch.Tensor:
+            if isinstance(state_dict[key], torch.Tensor):
                 state_dict[key] = state_dict[key].to(dtype)
 
     if os.path.splitext(file_name)[1] == ".safetensors":
@@ -54,7 +53,7 @@ def merge_lora_models(models, ratios, new_rank, new_conv_rank, device, merge_dty
                 base_model = lora_metadata.get(train_util.SS_METADATA_KEY_BASE_MODEL_VERSION, None)
 
         # merge
-        print(f"merging...")
+        print("merging...")
         for key in tqdm(list(lora_sd.keys())):
             if "lora_down" not in key:
                 continue
@@ -75,7 +74,9 @@ def merge_lora_models(models, ratios, new_rank, new_conv_rank, device, merge_dty
 
             # make original weight if not exist
             if lora_module_name not in merged_sd:
-                weight = torch.zeros((out_dim, in_dim, *kernel_size) if conv2d else (out_dim, in_dim), dtype=merge_dtype)
+                weight = torch.zeros(
+                    (out_dim, in_dim, *kernel_size) if conv2d else (out_dim, in_dim), dtype=merge_dtype
+                )
                 if device:
                     weight = weight.to(device)
             else:
@@ -135,7 +136,7 @@ def merge_lora_models(models, ratios, new_rank, new_conv_rank, device, merge_dty
             Vh = Vh[:module_new_rank, :]
 
             dist = torch.cat([U.flatten(), Vh.flatten()])
-            hi_val = torch.quantile(dist, CLAMP_QUANTILE)
+            hi_val = torch.quantile(dist.float(), CLAMP_QUANTILE).to(dist.dtype)
             low_val = -hi_val
 
             U = U.clamp(low_val, hi_val)
@@ -165,7 +166,9 @@ def merge_lora_models(models, ratios, new_rank, new_conv_rank, device, merge_dty
 
 
 def merge(args):
-    assert len(args.models) == len(args.ratios), f"number of models must be equal to number of ratios / モデルの数と重みの数は合わせてください"
+    assert len(args.models) == len(
+        args.ratios
+    ), "number of models must be equal to number of ratios / モデルの数と重みの数は合わせてください"
 
     def str_to_dtype(p):
         if p == "float":
@@ -186,7 +189,7 @@ def merge(args):
         args.models, args.ratios, args.new_rank, new_conv_rank, args.device, merge_dtype
     )
 
-    print(f"calculating hashes and creating metadata...")
+    print("calculating hashes and creating metadata...")
 
     model_hash, legacy_hash = train_util.precalculate_safetensors_hashes(state_dict, metadata)
     metadata["sshs_model_hash"] = model_hash
@@ -196,14 +199,20 @@ def merge(args):
         is_sdxl = base_model is not None and base_model.lower().startswith("sdxl")
         merged_from = sai_model_spec.build_merged_from(args.models)
         title = os.path.splitext(os.path.basename(args.save_to))[0]
-        sai_metadata = sai_model_spec.build_metadata(
-            state_dict, v2, v2, is_sdxl, True, False, time.time(), title=title, merged_from=merged_from
-        )
+
+        is_v_prediction = v2
         if v2:
-            # TODO read sai modelspec
-            print(
-                "Cannot determine if LoRA is for v-prediction, so save metadata as v-prediction / LoRAがv-prediction用か否か不明なため、仮にv-prediction用としてmetadataを保存します"
-            )
+            lora_metadata = sai_model_spec.load_metadata_from_safetensors(args.models[0]) if args.models else {}
+            if "modelspec.prediction_type" in lora_metadata:
+                is_v_prediction = lora_metadata["modelspec.prediction_type"] == sai_model_spec.PRED_TYPE_V
+            else:
+                print(
+                    "Cannot determine if LoRA is for v-prediction, so save metadata as v-prediction / LoRAがv-prediction用か否か不明なため、仮にv-prediction用としてmetadataを保存します"
+                )
+
+        sai_metadata = sai_model_spec.build_metadata(
+            state_dict, v2, is_v_prediction, is_sdxl, True, False, time.time(), title=title, merged_from=merged_from
+        )
         metadata.update(sai_metadata)
 
     print(f"saving model to: {args.save_to}")
@@ -227,20 +236,30 @@ def setup_parser() -> argparse.ArgumentParser:
         help="precision in merging (float is recommended) / マージの計算時の精度（floatを推奨）",
     )
     parser.add_argument(
-        "--save_to", type=str, default=None, help="destination file name: ckpt or safetensors file / 保存先のファイル名、ckptまたはsafetensors"
+        "--save_to",
+        type=str,
+        default=None,
+        help="destination file name: ckpt or safetensors file / 保存先のファイル名、ckptまたはsafetensors",
     )
     parser.add_argument(
-        "--models", type=str, nargs="*", help="LoRA models to merge: ckpt or safetensors file / マージするLoRAモデル、ckptまたはsafetensors"
+        "--models",
+        type=str,
+        nargs="*",
+        help="LoRA models to merge: ckpt or safetensors file / マージするLoRAモデル、ckptまたはsafetensors",
     )
     parser.add_argument("--ratios", type=float, nargs="*", help="ratios for each model / それぞれのLoRAモデルの比率")
-    parser.add_argument("--new_rank", type=int, default=4, help="Specify rank of output LoRA / 出力するLoRAのrank (dim)")
+    parser.add_argument(
+        "--new_rank", type=int, default=4, help="Specify rank of output LoRA / 出力するLoRAのrank (dim)"
+    )
     parser.add_argument(
         "--new_conv_rank",
         type=int,
         default=None,
         help="Specify rank of output LoRA for Conv2d 3x3, None for same as new_rank / 出力するConv2D 3x3 LoRAのrank (dim)、Noneでnew_rankと同じ",
     )
-    parser.add_argument("--device", type=str, default=None, help="device to use, cuda for GPU / 計算を行うデバイス、cuda でGPUを使う")
+    parser.add_argument(
+        "--device", type=str, default=None, help="device to use, cuda for GPU / 計算を行うデバイス、cuda でGPUを使う"
+    )
     parser.add_argument(
         "--no_metadata",
         action="store_true",

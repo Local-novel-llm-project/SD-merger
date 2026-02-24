@@ -2,24 +2,24 @@
 # state dictの形式をSDXLに合わせてある
 
 """
-      target: sgm.modules.diffusionmodules.openaimodel.UNetModel
-      params:
-        adm_in_channels: 2816
-        num_classes: sequential
-        use_checkpoint: True
-        in_channels: 4
-        out_channels: 4
-        model_channels: 320
-        attention_resolutions: [4, 2]
-        num_res_blocks: 2
-        channel_mult: [1, 2, 4]
-        num_head_channels: 64
-        use_spatial_transformer: True
-        use_linear_in_transformer: True
-        transformer_depth: [1, 2, 10]  # note: the first is unused (due to attn_res starting at 2) 32, 16, 8 --> 64, 32, 16
-        context_dim: 2048
-        spatial_transformer_attn_type: softmax-xformers
-        legacy: False
+target: sgm.modules.diffusionmodules.openaimodel.UNetModel
+params:
+  adm_in_channels: 2816
+  num_classes: sequential
+  use_checkpoint: True
+  in_channels: 4
+  out_channels: 4
+  model_channels: 320
+  attention_resolutions: [4, 2]
+  num_res_blocks: 2
+  channel_mult: [1, 2, 4]
+  num_head_channels: 64
+  use_spatial_transformer: True
+  use_linear_in_transformer: True
+  transformer_depth: [1, 2, 10]  # note: the first is unused (due to attn_res starting at 2) 32, 16, 8 --> 64, 32, 16
+  context_dim: 2048
+  spatial_transformer_attn_type: softmax-xformers
+  legacy: False
 """
 
 import math
@@ -39,7 +39,7 @@ CONTEXT_DIM: int = 2048
 MODEL_CHANNELS: int = 320
 TIME_EMBED_DIM = 320 * 4
 
-USE_REENTRANT = True
+USE_REENTRANT = False
 
 # region memory efficient attention
 
@@ -138,7 +138,9 @@ class FlashAttentionFunction(torch.autograd.Function):
 
                 new_row_sums = exp_row_max_diff * row_sums + exp_block_row_max_diff * block_row_sums
 
-                oc.mul_((row_sums / new_row_sums) * exp_row_max_diff).add_((exp_block_row_max_diff / new_row_sums) * exp_values)
+                oc.mul_((row_sums / new_row_sums) * exp_row_max_diff).add_(
+                    (exp_block_row_max_diff / new_row_sums) * exp_values
+                )
 
                 row_maxes.copy_(new_row_maxes)
                 row_sums.copy_(new_row_sums)
@@ -323,7 +325,9 @@ class ResnetBlock2D(nn.Module):
 
                 return custom_forward
 
-            x = torch.utils.checkpoint.checkpoint(create_custom_forward(self.forward_body), x, emb, use_reentrant=USE_REENTRANT)
+            x = torch.utils.checkpoint.checkpoint(
+                create_custom_forward(self.forward_body), x, emb, use_reentrant=USE_REENTRANT
+            )
         else:
             x = self.forward_body(x, emb)
 
@@ -426,8 +430,13 @@ class CrossAttention(nn.Module):
 
         query = self.to_q(hidden_states)
         context = context if context is not None else hidden_states
-        key = self.to_k(context)
-        value = self.to_v(context)
+
+        context_k, context_v = context, context
+        if getattr(self, "hypernetwork", None) is not None:
+            context_k, context_v = self.hypernetwork(hidden_states, context)
+
+        key = self.to_k(context_k)
+        value = self.to_v(context_v)
 
         query = self.reshape_heads_to_batch_dim(query)
         key = self.reshape_heads_to_batch_dim(key)
@@ -446,7 +455,7 @@ class CrossAttention(nn.Module):
             key = key.float()
 
         attention_scores = torch.baddbmm(
-            torch.empty(query.shape[0], query.shape[1], key.shape[1], dtype=query.dtype, device=query.device),
+            torch.zeros(query.shape[0], query.shape[1], key.shape[1], dtype=query.dtype, device=query.device),
             query,
             key.transpose(-1, -2),
             beta=0,
@@ -464,7 +473,6 @@ class CrossAttention(nn.Module):
         hidden_states = self.reshape_batch_dim_to_heads(hidden_states)
         return hidden_states
 
-    # TODO support Hypernetworks
     def forward_memory_efficient_xformers(self, x, context=None, mask=None):
         import xformers.ops
 
@@ -472,8 +480,13 @@ class CrossAttention(nn.Module):
         q_in = self.to_q(x)
         context = context if context is not None else x
         context = context.to(x.dtype)
-        k_in = self.to_k(context)
-        v_in = self.to_v(context)
+
+        context_k, context_v = context, context
+        if getattr(self, "hypernetwork", None) is not None:
+            context_k, context_v = self.hypernetwork(x, context)
+
+        k_in = self.to_k(context_k)
+        v_in = self.to_v(context_v)
 
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b n h d", h=h), (q_in, k_in, v_in))
         del q_in, k_in, v_in
@@ -499,8 +512,13 @@ class CrossAttention(nn.Module):
         q = self.to_q(x)
         context = context if context is not None else x
         context = context.to(x.dtype)
-        k = self.to_k(context)
-        v = self.to_v(context)
+
+        context_k, context_v = context, context
+        if getattr(self, "hypernetwork", None) is not None:
+            context_k, context_v = self.hypernetwork(x, context)
+
+        k = self.to_k(context_k)
+        v = self.to_v(context_v)
         del context, x
 
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q, k, v))
@@ -517,8 +535,13 @@ class CrossAttention(nn.Module):
         q_in = self.to_q(x)
         context = context if context is not None else x
         context = context.to(x.dtype)
-        k_in = self.to_k(context)
-        v_in = self.to_v(context)
+
+        context_k, context_v = context, context
+        if getattr(self, "hypernetwork", None) is not None:
+            context_k, context_v = self.hypernetwork(x, context)
+
+        k_in = self.to_k(context_k)
+        v_in = self.to_v(context_v)
 
         q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), (q_in, k_in, v_in))
         del q_in, k_in, v_in
@@ -580,7 +603,12 @@ class FeedForward(nn.Module):
 
 class BasicTransformerBlock(nn.Module):
     def __init__(
-        self, dim: int, num_attention_heads: int, attention_head_dim: int, cross_attention_dim: int, upcast_attention: bool = False
+        self,
+        dim: int,
+        num_attention_heads: int,
+        attention_head_dim: int,
+        cross_attention_dim: int,
+        upcast_attention: bool = False,
     ):
         super().__init__()
 
@@ -993,7 +1021,11 @@ class SdxlUNet2DConditionModel(nn.Module):
 
         # output
         self.out = nn.ModuleList(
-            [GroupNorm32(32, self.model_channels), nn.SiLU(), nn.Conv2d(self.model_channels, self.out_channels, 3, padding=1)]
+            [
+                GroupNorm32(32, self.model_channels),
+                nn.SiLU(),
+                nn.Conv2d(self.model_channels, self.out_channels, 3, padding=1),
+            ]
         )
 
     # region diffusers compatibility
@@ -1116,7 +1148,9 @@ if __name__ == "__main__":
 
     import transformers
 
-    optimizer = transformers.optimization.Adafactor(unet.parameters(), relative_step=True)  # working at 22.2GB with torch2
+    optimizer = transformers.optimization.Adafactor(
+        unet.parameters(), relative_step=True
+    )  # working at 22.2GB with torch2
 
     scaler = torch.cuda.amp.GradScaler(enabled=True)
 

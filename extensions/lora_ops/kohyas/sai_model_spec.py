@@ -78,9 +78,11 @@ def load_bytes_in_safetensors(tensors):
 
 def precalculate_safetensors_hashes(state_dict):
     # calculate each tensor one by one to reduce memory usage
+    # safetensors orders keys alphabetically in the header.
     hash_sha256 = hashlib.sha256()
-    for tensor in state_dict.values():
-        single_tensor_sd = {"tensor": tensor}
+    for key in sorted(state_dict.keys()):
+        tensor = state_dict[key]
+        single_tensor_sd = {key: tensor}
         bytes_for_tensor = load_bytes_in_safetensors(single_tensor_sd)
         hash_sha256.update(bytes_for_tensor)
 
@@ -115,10 +117,9 @@ def build_metadata(
     metadata = {}
     metadata.update(BASE_METADATA)
 
-    # TODO メモリを消費せずかつ正しいハッシュ計算の方法がわかったら実装する
-    # if state_dict is not None:
-    # hash = precalculate_safetensors_hashes(state_dict)
-    # metadata["modelspec.hash_sha256"] = hash
+    if state_dict is not None:
+        hash = precalculate_safetensors_hashes(state_dict)
+        metadata["modelspec.hash_sha256"] = hash
 
     if sdxl:
         arch = ARCH_SD_XL_V1_BASE
@@ -138,7 +139,7 @@ def build_metadata(
     metadata["modelspec.architecture"] = arch
 
     if not lora and not textual_inversion and is_stable_diffusion_ckpt is None:
-        is_stable_diffusion_ckpt = True # default is stable diffusion ckpt if not lora and not textual_inversion
+        is_stable_diffusion_ckpt = True  # default is stable diffusion ckpt if not lora and not textual_inversion
 
     if (lora and sdxl) or textual_inversion or is_stable_diffusion_ckpt:
         # Stable Diffusion ckpt, TI, SDXL LoRA
@@ -232,7 +233,7 @@ def build_metadata(
     # assert all([v is not None for v in metadata.values()]), metadata
     if not all([v is not None for v in metadata.values()]):
         print(f"Internal error: some metadata values are None: {metadata}")
-    
+
     return metadata
 
 
@@ -246,7 +247,7 @@ def get_title(metadata: dict) -> Optional[str]:
 def load_metadata_from_safetensors(model: str) -> dict:
     if not model.endswith(".safetensors"):
         return {}
-    
+
     with safetensors.safe_open(model, framework="pt") as f:
         metadata = f.metadata()
     if metadata is None:
