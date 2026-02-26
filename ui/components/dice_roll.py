@@ -3,6 +3,7 @@ import os
 import random
 import yaml
 from module.generation import generate_image
+from ui.utils import get_model_list, get_model_path
 
 
 def render_dice_roll_tab():
@@ -13,11 +14,12 @@ def render_dice_roll_tab():
 
     with gr.Row():
         with gr.Column(scale=1):
-            model_a = gr.File(
-                label="Model A (Left)", file_types=[".safetensors", ".ckpt"]
+            model_list = get_model_list()
+            model_a = gr.Dropdown(
+                label="Model A (Left)", choices=model_list
             )
-            model_b = gr.File(
-                label="Model B (Right)", file_types=[".safetensors", ".ckpt"]
+            model_b = gr.Dropdown(
+                label="Model B (Right)", choices=model_list
             )
 
             with gr.Accordion("Randomization Constraints", open=True):
@@ -60,7 +62,7 @@ def render_dice_roll_tab():
                 height = gr.Slider(
                     label="Height", minimum=256, maximum=1024, step=64, value=512
                 )
-                fixed_seed = gr.Number(label="Seed", value=1337)
+                fixed_seed = gr.Number(label="Seed (-1 or 0 for random)", value=-1, precision=0)
 
             roll_btn = gr.Button("🎲 Roll the Dice!", variant="primary")
 
@@ -69,7 +71,7 @@ def render_dice_roll_tab():
             output_params = gr.JSON(label="Rolled Parameters")
             output_log = gr.Textbox(label="Log", interactive=False)
 
-    def run_dice(ma, mb, allowed_strats, a_min, a_max, p, np, w, h, seed):
+    def run_dice(ma, mb, allowed_strats, a_min, a_max, p, np, w, h, seed_in):
         if not ma or not mb:
             return None, {}, "Model A and Model B are required."
         if not allowed_strats:
@@ -82,6 +84,9 @@ def render_dice_roll_tab():
         )
         from main import main as merger_main
         from module.history import save_history
+        from module.extension_manager import load_extensions
+
+        load_extensions()
 
         # Roll strategy
         strategy = random.choice(allowed_strats)
@@ -92,19 +97,21 @@ def render_dice_roll_tab():
         # Roll MBW
         mbw = [round(random.uniform(a_min, a_max), 3) for _ in range(26)]
         mbw_str = ",".join(map(str, mbw))
+        
+        actual_seed = int(seed_in) if int(seed_in) > 0 else random.randint(1, 1125899906842624)
 
-        rolled_params = {"strategy": strategy, "velocity": velocity, "mbw": mbw_str}
+        rolled_params = {"strategy": strategy, "velocity": velocity, "mbw": mbw_str, "seed": actual_seed}
 
         # Config
         tmp_dir = os.path.abspath("./merged/dice_tmp")
         os.makedirs(tmp_dir, exist_ok=True)
 
         config = {
-            "target_model": ma.name,
+            "target_model": get_model_path(ma),
             "models": [
                 {
-                    "left": ma.name,
-                    "right": mb.name,
+                    "left": get_model_path(ma),
+                    "right": get_model_path(mb),
                     "strategy": strategy,
                     "velocity": velocity,
                     "mbw": mbw_str,
@@ -118,7 +125,7 @@ def render_dice_roll_tab():
             yaml.dump(config, f)
 
         out_model = os.path.join(tmp_dir, "dice_result.safetensors")
-        log = f"Rolled: Strategy={strategy}, Velocity={velocity}\nMerging...\n"
+        log = f"Rolled: Strategy={strategy}, Velocity={velocity}, Seed={actual_seed}\nMerging...\n"
 
         try:
             merger_main(cfg_file, out_model)
@@ -149,7 +156,7 @@ def render_dice_roll_tab():
                 cfg=7.0,
                 sampler_name="euler",
                 scheduler="normal",
-                seed=seed,
+                seed=actual_seed,
             )
 
             if img:

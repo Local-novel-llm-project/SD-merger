@@ -7,7 +7,7 @@ import logging
 def _get_comfy_dir():
     """Returns the path to the ComfyUI reference directory."""
     return os.environ.get(
-        "COMFYUI_DIR", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "refrence", "ComfyUI"))
+        "COMFYUI_DIR", os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "reference", "ComfyUI"))
     )
 
 
@@ -87,6 +87,20 @@ def generate_image(
         from PIL import Image
 
         pil_images = [Image.fromarray(img) for img in images]
+
+        # Memory cleanup
+        try:
+            import comfy.model_management as mm
+            del model, clip, vae, latent, samples, images
+            mm.unload_all_models()
+            mm.soft_empty_cache()
+        except Exception:
+            pass
+
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         return pil_images[0]  # Return the first image
 

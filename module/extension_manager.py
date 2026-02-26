@@ -87,12 +87,16 @@ def run_post_merge_hooks(config: dict, output_path: str):
             logging.error(f"post_merge フック実行中にエラーが発生しました: {e}")
 
 
-def load_extensions(extensions_dir: str = "extensions"):
+def load_extensions(extensions_dir: str = None):
     """
     指定されたディレクトリ内の拡張機能を動的に読み込む。
     各拡張機能ディレクトリの `__init__.py` (またはメインモジュール) にある
     `setup()` 関数が存在すればそれを呼び出す。
     """
+    if extensions_dir is None:
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        extensions_dir = os.path.join(project_root, "extensions")
+
     if not os.path.exists(extensions_dir):
         logging.info(
             f"拡張機能ディレクトリ '{extensions_dir}' が見つかりませんでした。作成します。"

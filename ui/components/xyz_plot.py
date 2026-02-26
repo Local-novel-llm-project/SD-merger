@@ -3,6 +3,7 @@ import gradio as gr
 import tempfile
 import yaml
 from PIL import Image, ImageDraw, ImageFont
+from ui.utils import get_model_list, get_model_path
 
 
 def render_xyz_plot_tab():
@@ -11,8 +12,9 @@ def render_xyz_plot_tab():
 
     with gr.Row():
         with gr.Column(scale=1):
-            model_a = gr.File(label="Model A (Left)", file_types=[".safetensors"])
-            model_b = gr.File(label="Model B (Right)", file_types=[".safetensors"])
+            model_list = get_model_list()
+            model_a = gr.Dropdown(label="Model A (Left)", choices=model_list)
+            model_b = gr.Dropdown(label="Model B (Right)", choices=model_list)
 
             x_type = gr.Dropdown(
                 label="X Type",
@@ -43,7 +45,7 @@ def render_xyz_plot_tab():
                 height = gr.Slider(
                     label="Height", minimum=256, maximum=1024, step=64, value=512
                 )
-                fixed_seed = gr.Number(label="Seed", value=1337)
+                fixed_seed = gr.Number(label="Seed (-1 or 0 for random)", value=-1, precision=0)
 
             generate_btn = gr.Button("Generate XY Grid", variant="primary")
             output_log = gr.Textbox(label="Log", interactive=False)
@@ -51,20 +53,25 @@ def render_xyz_plot_tab():
         with gr.Column(scale=2):
             output_grid = gr.Image(label="XY Grid")
 
-    def run_xy(ma, mb, xt, xv, yt, yv, p, np, w, h, seed):
+    def run_xy(ma, mb, xt, xv, yt, yv, p, np, w, h, seed_in):
         if not ma or not mb:
             return None, "Model A and Model B required."
 
         import sys
+        import random
 
         sys.path.insert(
             0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         )
         from main import main as merger_main
         from module.generation import generate_image
+        from module.extension_manager import load_extensions
+        load_extensions()
 
         x_vals = [x.strip() for x in xv.split(",")]
         y_vals = [y.strip() for y in yv.split(",")]
+        
+        actual_seed = int(seed_in) if int(seed_in) > 0 else random.randint(1, 1125899906842624)
 
         def parse_val(vtype, val):
             if vtype in ["Velocity", "CFG Scale"]:
@@ -74,7 +81,7 @@ def render_xyz_plot_tab():
             return val
 
         images = []
-        log = ""
+        log = f"Using Seed: {actual_seed}\n"
 
         tmp_dir = os.path.abspath("./merged/xyz_tmp")
         os.makedirs(tmp_dir, exist_ok=True)
@@ -105,11 +112,11 @@ def render_xyz_plot_tab():
 
                 if xt in ["Velocity", "Strategy"] or yt in ["Velocity", "Strategy"]:
                     config = {
-                        "target_model": ma.name,
+                        "target_model": get_model_path(ma),
                         "models": [
                             {
-                                "left": ma.name,
-                                "right": mb.name,
+                                "left": get_model_path(ma),
+                                "right": get_model_path(mb),
                                 "strategy": strategy,
                                 "velocity": velocity,
                                 "key_patterns": ["."],
@@ -129,7 +136,7 @@ def render_xyz_plot_tab():
                     files = glob.glob(os.path.join(tmp_dir, "*.safetensors"))
                     out_model = max(files, key=os.path.getctime)
                 else:
-                    out_model = ma.name
+                    out_model = get_model_path(ma)
 
                 log += f"Generating image for {xt}={x_val}, {yt}={y_val}...\n"
                 img = generate_image(
@@ -142,7 +149,7 @@ def render_xyz_plot_tab():
                     cfg=cfg,
                     sampler_name="euler",
                     scheduler="normal",
-                    seed=seed,
+                    seed=actual_seed,
                 )
 
                 if img is None:

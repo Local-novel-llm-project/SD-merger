@@ -3,6 +3,7 @@ import gradio as gr
 import yaml
 import tempfile
 from module.history import save_history
+from ui.utils import get_model_list, get_model_path
 
 
 def render_lora_ops_tab():
@@ -11,13 +12,14 @@ def render_lora_ops_tab():
             gr.Markdown("### Extract LoRA from Checkpoints")
             with gr.Row():
                 with gr.Column(scale=1):
-                    base_model = gr.File(
+                    model_list = get_model_list()
+                    base_model = gr.Dropdown(
                         label="Base Model (Original)",
-                        file_types=[".safetensors", ".ckpt"],
+                        choices=model_list,
                     )
-                    tuned_model = gr.File(
+                    tuned_model = gr.Dropdown(
                         label="Tuned Model (Finetuned)",
-                        file_types=[".safetensors", ".ckpt"],
+                        choices=model_list,
                     )
                     extract_output = gr.Textbox(
                         label="Output Filename", value="extracted_lora.safetensors"
@@ -53,9 +55,9 @@ def render_lora_ops_tab():
                         "operations": [
                             {
                                 "type": "extract",
-                                "base_model": base.name,
-                                "tuned_model": tuned.name,
-                                "output": os.path.abspath(out),
+                                "base_model": get_model_path(base),
+                                "tuned_model": get_model_path(tuned),
+                                "output": os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "output", out)) if not os.path.isabs(out) else os.path.abspath(out),
                                 "dim": int(d),
                                 "conv_dim": int(cd) if cd > 0 else None,
                                 "alpha": float(a),
@@ -90,10 +92,10 @@ def render_lora_ops_tab():
             gr.Markdown("### Merge Multiple LoRAs")
             with gr.Row():
                 with gr.Column(scale=1):
-                    models = gr.File(
+                    models = gr.Dropdown(
                         label="LoRA Models",
-                        file_types=[".safetensors", ".pt"],
-                        file_count="multiple",
+                        choices=get_model_list(),
+                        multiselect=True,
                     )
                     ratios = gr.Textbox(
                         label="Ratios (comma separated)",
@@ -134,7 +136,7 @@ def render_lora_ops_tab():
                 except ValueError:
                     return "Invalid ratios format. Must be comma separated numbers."
 
-                model_paths = [m.name for m in mods]
+                model_paths = [get_model_path(m) for m in mods]
 
                 if len(model_paths) != len(ratio_list):
                     # Pad ratios with 1.0 if not enough provided
@@ -151,7 +153,7 @@ def render_lora_ops_tab():
                                 "type": "merge",
                                 "models": model_paths,
                                 "ratios": ratio_list,
-                                "output": os.path.abspath(out),
+                                "output": os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "output", out)) if not os.path.isabs(out) else os.path.abspath(out),
                                 "precision": prec,
                                 "save_precision": s_prec,
                                 "concat": conc,
@@ -188,6 +190,8 @@ def _run_lora_config(config, out_name, op_name):
         0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
     )
     from main import main as merger_main
+    from module.extension_manager import load_extensions
+    load_extensions()
 
     try:
         with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:

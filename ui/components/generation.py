@@ -1,6 +1,7 @@
 import os
 import gradio as gr
 from module.generation import generate_image
+from ui.utils import get_model_list, get_model_path
 
 
 def render_generation_tab():
@@ -8,8 +9,8 @@ def render_generation_tab():
         with gr.Column(scale=1):
             gr.Markdown("### Test Generation (Powered by ComfyUI Backend)")
 
-            model_file = gr.File(
-                label="Model to Test", file_types=[".safetensors", ".ckpt"]
+            model_file = gr.Dropdown(
+                label="Model to Test", choices=get_model_list()
             )
 
             prompt = gr.Textbox(
@@ -72,7 +73,7 @@ def render_generation_tab():
                     value="normal",
                 )
 
-            seed = gr.Number(label="Seed (0 for random)", value=1337, precision=0)
+            seed = gr.Number(label="Seed (-1 or 0 for random)", value=-1, precision=0)
 
             generate_btn = gr.Button("Generate", variant="primary")
 
@@ -88,11 +89,11 @@ def render_generation_tab():
             import random
 
             actual_seed = (
-                int(se) if int(se) != 0 else random.randint(1, 0xFFFFFFFFFFFFFFFF)
+                int(se) if int(se) > 0 else random.randint(1, 1125899906842624)
             )
 
             img = generate_image(
-                model_path=m_file.name,
+                model_path=get_model_path(m_file),
                 prompt=p,
                 negative_prompt=n_p,
                 width=int(w),

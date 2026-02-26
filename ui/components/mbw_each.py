@@ -2,6 +2,7 @@ import os
 import gradio as gr
 import tempfile
 import yaml
+from ui.utils import get_model_list, get_model_path
 
 
 def render_mbw_each_tab():
@@ -12,11 +13,12 @@ def render_mbw_each_tab():
     )
 
     with gr.Row():
-        model_a = gr.File(label="Model A (Left)", file_types=[".safetensors", ".ckpt"])
-        model_b = gr.File(label="Model B (Right)", file_types=[".safetensors", ".ckpt"])
-        model_c = gr.File(
+        model_list = get_model_list()
+        model_a = gr.Dropdown(label="Model A (Left)", choices=model_list)
+        model_b = gr.Dropdown(label="Model B (Right)", choices=model_list)
+        model_c = gr.Dropdown(
             label="Model C (Base/Target, optional)",
-            file_types=[".safetensors", ".ckpt"],
+            choices=model_list,
         )
 
     with gr.Row():
@@ -61,12 +63,13 @@ def render_mbw_each_tab():
             if len_a not in (26, 20):
                 return f"Error: Length must be 26 (SD1.5) or 20 (SDXL). Found {len_a}."
 
+            target_model_path = get_model_path(c) if c else get_model_path(a)
             config = {
-                "target_model": c.name if c else a.name,
+                "target_model": target_model_path,
                 "models": [
                     {
-                        "left": a.name,
-                        "right": b.name,
+                        "left": get_model_path(a),
+                        "right": get_model_path(b),
                         "strategy": "mbw_each",
                         "mbw_a": mbw_a_val,
                         "mbw_b": mbw_b_val,
@@ -80,12 +83,14 @@ def render_mbw_each_tab():
                 0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
             )
             from main import main as merger_main
+            from module.extension_manager import load_extensions
+            load_extensions()
 
             with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
                 yaml.dump(config, f)
                 tmp_cfg = f.name
 
-            out_dir = os.path.abspath("./merged")
+            out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "output"))
             merger_main(tmp_cfg, out_dir)
 
             return f"MBW Each merge completed successfully.\nSaved to: {os.path.join(out_dir, out)}"

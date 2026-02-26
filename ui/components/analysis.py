@@ -1,5 +1,6 @@
 import gradio as gr
 from module.analysis import analyze_models
+from ui.utils import get_model_list, get_model_path
 
 
 def render_analysis_tab():
@@ -8,8 +9,9 @@ def render_analysis_tab():
 
     with gr.Row():
         with gr.Column(scale=1):
-            model_a = gr.File(label="Model A", file_types=[".safetensors"])
-            model_b = gr.File(label="Model B", file_types=[".safetensors"])
+            model_list = get_model_list()
+            model_a = gr.Dropdown(label="Model A", choices=model_list)
+            model_b = gr.Dropdown(label="Model B", choices=model_list)
 
             metric = gr.Dropdown(
                 label="Comparison Metric",
@@ -32,7 +34,7 @@ def render_analysis_tab():
             return None, "Please upload both Model A and Model B."
 
         try:
-            fig = analyze_models(ma.name, mb.name, metric=met)
+            fig = analyze_models(get_model_path(ma), get_model_path(mb), metric=met)
             return fig, "Analysis complete."
         except Exception as e:
             return None, f"Error during analysis: {e}"

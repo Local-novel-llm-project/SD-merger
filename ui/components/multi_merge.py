@@ -98,6 +98,8 @@ def render_multi_merge_tab():
             0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         )
         from main import main as merger_main
+        from module.extension_manager import load_extensions
+        load_extensions()
 
         log_msgs = []
         for i, op in enumerate(ops):
@@ -111,7 +113,7 @@ def render_multi_merge_tab():
                     yaml.dump(config, f)
                     tmp_cfg = f.name
 
-                out_dir = os.path.abspath("./merged")
+                out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "output"))
                 # ここではファイル名を直接指定する仕組みが main.py にはないため、一時的に generate_filename をフックするか出力後にリネームする必要があるが、一旦標準の流れを実行。
                 merger_main(tmp_cfg, out_dir)
                 log_msgs.append(

@@ -17,10 +17,13 @@ from ui.components.elemental_merge import render_elemental_merge_tab
 from ui.components.dice_roll import render_dice_roll_tab
 from ui.components.presets import render_presets_tab
 from ui.components.lora_ops import render_lora_ops_tab
+from ui.utils import get_model_list, get_model_path
 
 
 def create_ui():
     """Gradio UI のメインアプリケーションを構築する"""
+    from module.extension_manager import load_extensions
+    load_extensions()
 
     with gr.Blocks(title="SD-merger UI") as app:
         gr.Markdown("# SD-merger")
@@ -31,14 +34,15 @@ def create_ui():
             with gr.TabItem("Merge Models"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        model_a = gr.File(label="Model A (Left)", file_types=[".safetensors", ".ckpt"])
-                        model_b = gr.File(
+                        model_list = get_model_list()
+                        model_a = gr.Dropdown(label="Model A (Left)", choices=model_list)
+                        model_b = gr.Dropdown(
                             label="Model B (Right)",
-                            file_types=[".safetensors", ".ckpt"],
+                            choices=model_list
                         )
-                        model_c = gr.File(
+                        model_c = gr.Dropdown(
                             label="Model C (Base/Target, optional)",
-                            file_types=[".safetensors", ".ckpt"],
+                            choices=model_list
                         )
 
                     with gr.Column(scale=1):
@@ -85,7 +89,7 @@ def create_ui():
                             label="Merge Block Weight (MBW)",
                             placeholder="e.g. 1,0.5,0.5,0...",
                         )
-                        bake_in_vae = gr.File(label="Bake in VAE", file_types=[".safetensors", ".pt"])
+                        bake_in_vae = gr.Dropdown(label="Bake in VAE", choices=get_model_list())
                         output_name = gr.Textbox(label="Output Filename", value="merged_model.safetensors")
 
                 merge_btn = gr.Button("Merge Models", variant="primary")
@@ -106,12 +110,16 @@ def create_ui():
                     import yaml
 
                     # YAML configを一時ファイルに生成
+                    target_model_path = get_model_path(c) if c else get_model_path(a)
+                    left_model_path = get_model_path(a)
+                    right_model_path = get_model_path(b)
+                    
                     config = {
-                        "target_model": c.name if c else a.name,
+                        "target_model": target_model_path,
                         "models": [
                             {
-                                "left": a.name,
-                                "right": b.name,
+                                "left": left_model_path,
+                                "right": right_model_path,
                                 "strategy": strat,
                                 "target_strategy": t_strat,
                                 "velocity": float(vel),
@@ -122,7 +130,7 @@ def create_ui():
                     if mbw:
                         config["models"][0]["mbw"] = mbw
                     if vae:
-                        config["bake_in_vae"] = vae.name
+                        config["bake_in_vae"] = get_model_path(vae)
 
                     try:
                         with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
@@ -130,7 +138,7 @@ def create_ui():
                             tmp_cfg = f.name
 
                         # 実行
-                        out_dir = os.path.abspath("./merged")
+                        out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", "output"))
                         merger_main(tmp_cfg, out_dir)
                         save_history({"config": config, "output_name": out, "status": "Success"})
                         return f"Merge completed successfully. Saved to {out_dir}"
