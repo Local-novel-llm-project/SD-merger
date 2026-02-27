@@ -23,6 +23,7 @@ from ui.utils import get_model_list, get_model_path
 def create_ui():
     """Gradio UI のメインアプリケーションを構築する"""
     from module.extension_manager import load_extensions
+
     load_extensions()
 
     with gr.Blocks(title="SD-merger UI") as app:
@@ -36,14 +37,8 @@ def create_ui():
                     with gr.Column(scale=1):
                         model_list = get_model_list()
                         model_a = gr.Dropdown(label="Model A (Left)", choices=model_list)
-                        model_b = gr.Dropdown(
-                            label="Model B (Right)",
-                            choices=model_list
-                        )
-                        model_c = gr.Dropdown(
-                            label="Model C (Base/Target, optional)",
-                            choices=model_list
-                        )
+                        model_b = gr.Dropdown(label="Model B (Right)", choices=model_list)
+                        model_c = gr.Dropdown(label="Model C (Base/Target, optional)", choices=model_list)
 
                     with gr.Column(scale=1):
                         strategy = gr.Dropdown(
@@ -85,6 +80,7 @@ def create_ui():
 
                 with gr.Row():
                     with gr.Accordion("Advanced Options", open=False):
+                        use_advanced_options = gr.Checkbox(label="Enable Advanced Options", value=False)
                         mbw_str = gr.Textbox(
                             label="Merge Block Weight (MBW)",
                             placeholder="e.g. 1,0.5,0.5,0...",
@@ -95,7 +91,7 @@ def create_ui():
                 merge_btn = gr.Button("Merge Models", variant="primary")
                 merge_output = gr.Textbox(label="Output Log")
 
-                def run_merge(a, b, c, strat, t_strat, vel, mbw, vae, out):
+                def run_merge(a, b, c, strat, t_strat, vel, use_adv, mbw, vae, out):
                     if not a or not b:
                         return "Model A and Model B are required."
 
@@ -113,7 +109,7 @@ def create_ui():
                     target_model_path = get_model_path(c) if c else get_model_path(a)
                     left_model_path = get_model_path(a)
                     right_model_path = get_model_path(b)
-                    
+
                     config = {
                         "target_model": target_model_path,
                         "models": [
@@ -127,10 +123,12 @@ def create_ui():
                             }
                         ],
                     }
-                    if mbw:
+                    if use_adv and mbw:
                         config["models"][0]["mbw"] = mbw
-                    if vae:
+                    if use_adv and vae:
                         config["bake_in_vae"] = get_model_path(vae)
+                    if use_adv and out:
+                        config["output_name"] = out
 
                     try:
                         with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
@@ -161,6 +159,7 @@ def create_ui():
                         strategy,
                         target_strategy,
                         velocity,
+                        use_advanced_options,
                         mbw_str,
                         bake_in_vae,
                         output_name,

@@ -42,14 +42,13 @@ def render_mbw_each_tab():
 
     with gr.Row():
         with gr.Accordion("Advanced Options", open=False):
-            output_name = gr.Textbox(
-                label="Output Filename", value="mbw_each_merged.safetensors"
-            )
+            use_advanced_options = gr.Checkbox(label="Enable Advanced Options", value=False)
+            output_name = gr.Textbox(label="Output Filename", value="mbw_each_merged.safetensors")
 
     merge_btn = gr.Button("Run MBW Each Merge", variant="primary")
     output_log = gr.Textbox(label="Output Log", lines=3)
 
-    def run_mbw_each_merge(a, b, c, mbw_a_val, mbw_b_val, out):
+    def run_mbw_each_merge(a, b, c, mbw_a_val, mbw_b_val, use_adv, out):
         if not a or not b:
             return "Error: Model A and Model B are required."
 
@@ -76,14 +75,15 @@ def render_mbw_each_tab():
                     }
                 ],
             }
+            if use_adv and out:
+                config["output_name"] = out
 
             import sys
 
-            sys.path.insert(
-                0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-            )
+            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
             from main import main as merger_main
             from module.extension_manager import load_extensions
+
             load_extensions()
 
             with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
@@ -100,6 +100,6 @@ def render_mbw_each_tab():
 
     merge_btn.click(
         run_mbw_each_merge,
-        inputs=[model_a, model_b, model_c, mbw_a, mbw_b, output_name],
+        inputs=[model_a, model_b, model_c, mbw_a, mbw_b, use_advanced_options, output_name],
         outputs=[output_log],
     )

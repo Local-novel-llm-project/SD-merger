@@ -84,15 +84,11 @@ def main(config_path: str, output_dir: str) -> None:
 
         if not key_patterns:
             if recipe is None:
-                logging.error(
-                    "target_model と key_patterns の両方が未指定です。どちらかを指定してください。"
-                )
+                logging.error("target_model と key_patterns の両方が未指定です。どちらかを指定してください。")
                 sys.exit(1)
             # 現在は sd-mecha が全キーを走査するため、必要であれば事前検出などは別に行う必要があります。
             # プロジェクトの互換性維持のためここは一度エラーにします。
-            logging.error(
-                'key_patterns の指定は必須です。(全キーを指定する場合は "." 等を指定)'
-            )
+            logging.error('key_patterns の指定は必須です。(全キーを指定する場合は "." 等を指定)')
             sys.exit(1)
 
         calc_func = get_calculation_strategy(strategy_name, replace_with)
@@ -148,10 +144,14 @@ def main(config_path: str, output_dir: str) -> None:
             # ターゲットモデルがない場合、left/right の計算結果をそのまま使用
             recipe = scale_tensor(diff_node, scale=target_velocity)
 
-    # 全モデル設定から代表名を取得してファイル名を生成
-    first_left_name = os.path.basename(models[0]["left"])
-    last_right_name = os.path.basename(models[-1]["right"])
-    output_filename = generate_filename(first_left_name, last_right_name)
+    # 出力ファイル名の決定 (設定があればそれを優先)
+    output_filename = config.get("output_name")
+    if not output_filename:
+        # 全モデル設定から代表名を取得してファイル名を生成
+        first_left_name = os.path.basename(models[0]["left"])
+        last_right_name = os.path.basename(models[-1]["right"])
+        output_filename = generate_filename(first_left_name, last_right_name)
+
     output_path = os.path.join(output_dir, output_filename)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -170,18 +170,10 @@ def main(config_path: str, output_dir: str) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="モデルの差分計算とマージツール (sd-mecha版)"
-    )
-    parser.add_argument(
-        "-c", "--config", type=str, default="sd_config.yaml", help="設定ファイルのパス"
-    )
-    parser.add_argument(
-        "-o", "--output", type=str, default="./merged", help="出力ディレクトリのパス"
-    )
-    parser.add_argument(
-        "-d", "--debug", action="store_true", help="DEBUGログレベルを有効にする"
-    )
+    parser = argparse.ArgumentParser(description="モデルの差分計算とマージツール (sd-mecha版)")
+    parser.add_argument("-c", "--config", type=str, default="sd_config.yaml", help="設定ファイルのパス")
+    parser.add_argument("-o", "--output", type=str, default="./merged", help="出力ディレクトリのパス")
+    parser.add_argument("-d", "--debug", action="store_true", help="DEBUGログレベルを有効にする")
     args = parser.parse_args()
 
     if args.debug:
