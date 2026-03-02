@@ -8,7 +8,18 @@ def render_generation_tab():
         with gr.Column(scale=1):
             gr.Markdown("### Test Generation (Powered by Diffusers)")
 
-            model_file = gr.Dropdown(label="Model to Test", choices=get_model_list())
+            with gr.Row():
+                model_file = gr.Dropdown(
+                    label="Model to Test",
+                    choices=get_model_list(),
+                    scale=8,
+                )
+                reload_btn = gr.Button("🔄", scale=1, min_width=60)
+
+            def refresh_models():
+                return gr.update(choices=get_model_list())
+
+            reload_btn.click(fn=refresh_models, inputs=[], outputs=[model_file])
 
             prompt = gr.Textbox(
                 label="Prompt",
