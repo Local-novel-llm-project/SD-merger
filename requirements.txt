@@ -10,33 +10,23 @@ gradio>=4.0.0
 matplotlib>=3.7.0
 pandas>=2.0.0
 
-# Image Generation Backend (ComfyUI deps)
-torchsde>=0.2.6
-torchvision
-torchaudio
-numpy>=1.25.0
-einops>=0.8.2
+# Image Generation Backend (Diffusers)
+diffusers>=0.31.0
+accelerate>=0.25.0
 transformers>=4.50.3
 tokenizers>=0.13.3
 sentencepiece>=0.2.1
-aiohttp>=3.11.8
-yarl>=1.18.0
+torchvision
+numpy>=1.25.0
 Pillow
 scipy
 tqdm
-psutil
-alembic
-SQLAlchemy
-av>=14.2.0
-comfy-kitchen>=0.2.7
-comfy-aimdo>=0.2.0
 requests
 
-# Optional CV / Inference (ComfyUI advanced)
-comfyui-frontend-package==1.39.14
-comfyui-workflow-templates==0.8.43
-comfyui-embedded-docs==0.4.1
+# Optional
 kornia>=0.7.1
 spandrel
 pydantic~=2.0
 pydantic-settings~=2.0
+einops>=0.8.2
+psutil

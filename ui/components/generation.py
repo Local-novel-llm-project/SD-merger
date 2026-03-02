@@ -1,4 +1,3 @@
-import os
 import gradio as gr
 from module.generation import generate_image
 from ui.utils import get_model_list, get_model_path
@@ -7,11 +6,9 @@ from ui.utils import get_model_list, get_model_path
 def render_generation_tab():
     with gr.Row():
         with gr.Column(scale=1):
-            gr.Markdown("### Test Generation (Powered by ComfyUI Backend)")
+            gr.Markdown("### Test Generation (Powered by Diffusers)")
 
-            model_file = gr.Dropdown(
-                label="Model to Test", choices=get_model_list()
-            )
+            model_file = gr.Dropdown(label="Model to Test", choices=get_model_list())
 
             prompt = gr.Textbox(
                 label="Prompt",
@@ -25,20 +22,12 @@ def render_generation_tab():
             )
 
             with gr.Row():
-                width = gr.Slider(
-                    label="Width", minimum=256, maximum=2048, step=64, value=512
-                )
-                height = gr.Slider(
-                    label="Height", minimum=256, maximum=2048, step=64, value=512
-                )
+                width = gr.Slider(label="Width", minimum=256, maximum=2048, step=64, value=512)
+                height = gr.Slider(label="Height", minimum=256, maximum=2048, step=64, value=512)
 
             with gr.Row():
-                steps = gr.Slider(
-                    label="Steps", minimum=1, maximum=150, step=1, value=20
-                )
-                cfg = gr.Slider(
-                    label="CFG Scale", minimum=1.0, maximum=30.0, step=0.5, value=7.0
-                )
+                steps = gr.Slider(label="Steps", minimum=1, maximum=150, step=1, value=20)
+                cfg = gr.Slider(label="CFG Scale", minimum=1.0, maximum=30.0, step=0.5, value=7.0)
 
             with gr.Row():
                 sampler = gr.Dropdown(
@@ -88,9 +77,7 @@ def render_generation_tab():
         try:
             import random
 
-            actual_seed = (
-                int(se) if int(se) > 0 else random.randint(1, 1125899906842624)
-            )
+            actual_seed = int(se) if int(se) > 0 else random.randint(1, 1125899906842624)
 
             img = generate_image(
                 model_path=get_model_path(m_file),
