@@ -163,13 +163,18 @@ class QueueManager:
                     else:
                         config["output_name"] = task_to_run["output_name"]
 
-                with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
-                    yaml.dump(config, f)
-                    tmp_cfg = f.name
+                if "poison_merge" in config:
+                    from module.pipeline.poison import run_poison_merge
 
-                out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", "output"))
+                    run_poison_merge(config, task_to_run["name"])
+                else:
+                    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
+                        yaml.dump(config, f)
+                        tmp_cfg = f.name
 
-                merger_main(tmp_cfg, out_dir)
+                    out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", "output"))
+
+                    merger_main(tmp_cfg, out_dir)
 
                 # history save if it's not a batch item saving logic from inside
                 history_entry = {

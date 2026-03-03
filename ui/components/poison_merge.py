@@ -18,6 +18,11 @@ def render_poison_merge_tab():
             iterations = gr.Slider(label="Iterations", minimum=1, maximum=20, step=1, value=3)
             decay_type = gr.Dropdown(label="Decay Curve", choices=["linear", "exponential", "cosine"], value="linear")
             initial_alpha = gr.Slider(label="Initial Alpha (Weight)", minimum=0.01, maximum=2.0, step=0.01, value=1.0)
+            alpha_override = gr.Textbox(
+                label="Alpha Overrides (comma separated)",
+                placeholder="e.g. 1.0, 0.8, 0.5 (Overrides the curve above if provided)",
+                value="",
+            )
 
             output_dir = gr.Textbox(label="Output Directory", value="models/output/poison_merge")
 
@@ -43,7 +48,7 @@ def render_poison_merge_tab():
             """
             )
 
-    def run_poison(bm, lm, iters, decay, alpha, out_dir, p, np, s):
+    def run_poison(bm, lm, iters, decay, alpha, overrides, out_dir, p, np, s):
         if not bm or not lm:
             return "Base Model and LoRA are required."
 
@@ -57,6 +62,7 @@ def render_poison_merge_tab():
                 "iterations": int(iters),
                 "decay_type": decay,
                 "initial_alpha": float(alpha),
+                "alpha_overrides": overrides.strip(),
                 "output_dir": abs_out_dir,
                 "prompt": p,
                 "negative_prompt": np,
@@ -82,6 +88,7 @@ def render_poison_merge_tab():
             iterations,
             decay_type,
             initial_alpha,
+            alpha_override,
             output_dir,
             prompt,
             negative_prompt,
