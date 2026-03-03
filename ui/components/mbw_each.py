@@ -1,5 +1,77 @@
 import gradio as gr
+import numpy as np
+import pandas as pd
 from ui.utils import get_model_list, get_model_path
+
+
+def generate_curve(curve_type: str, start_val: float, end_val: float, length: int) -> list[float]:
+    """指定されたカーブタイプで長さ length の補間配列を生成する"""
+    if length <= 0:
+        return []
+    if length == 1:
+        return [start_val]
+
+    t = np.linspace(0, 1, length)
+
+    if curve_type == "Flat":
+        # Flatの場合はStart値を全体に適用 (Endは無視)
+        y = np.full(length, start_val)
+    elif curve_type == "Linear":
+        y = start_val + (end_val - start_val) * t
+    elif curve_type == "Sigmoid":
+        # -6 to 6 range for a standard sigmoid shape
+        x = np.linspace(-6, 6, length)
+        sig = 1 / (1 + np.exp(-x))
+        y = start_val + (end_val - start_val) * sig
+    elif curve_type == "Cosine":
+        # 0 to pi
+        cos_val = (1 - np.cos(t * np.pi)) / 2
+        y = start_val + (end_val - start_val) * cos_val
+    else:
+        y = np.full(length, start_val)
+
+    return [round(float(v), 3) for v in y]
+
+
+def generate_mbw_array(
+    arch: str,
+    base_val: float,
+    in_curve: str,
+    in_start: float,
+    in_end: float,
+    mid_val: float,
+    out_curve: str,
+    out_start: float,
+    out_end: float,
+) -> list[float]:
+    """アーキテクチャに応じた一連のMBW配列を生成する"""
+    if arch == "SD1.5 (26 Blocks)":
+        in_len, out_len = 12, 12
+    else:  # SDXL (20 Blocks)
+        in_len, out_len = 9, 9
+
+    in_blocks = generate_curve(in_curve, in_start, in_end, in_len)
+    out_blocks = generate_curve(out_curve, out_start, out_end, out_len)
+
+    return [base_val] + in_blocks + [mid_val] + out_blocks
+
+
+def build_plot_data(mbw_array: list[float], arch: str) -> pd.DataFrame:
+    """gr.LinePlot 用のデータフレームを構築する"""
+    blocks = []
+    blocks.append("BASE")
+
+    if arch == "SD1.5 (26 Blocks)":
+        blocks.extend([f"IN{i:02d}" for i in range(12)])
+        blocks.append("MID")
+        blocks.extend([f"OUT{i:02d}" for i in range(12)])
+    else:
+        blocks.extend([f"IN{i:02d}" for i in range(9)])
+        blocks.append("MID")
+        blocks.extend([f"OUT{i:02d}" for i in range(9)])
+
+    df = pd.DataFrame({"Block": blocks, "Index": range(len(mbw_array)), "Alpha": mbw_array})
+    return df
 
 
 def render_mbw_each_tab():
@@ -18,6 +90,66 @@ def render_mbw_each_tab():
             choices=model_list,
         )
 
+    # --- Pincushion Merge (Auto Curve Generator) UI ---
+    with gr.Accordion("Pincushion Merge (Auto Curve Generator)", open=False):
+        gr.Markdown("連続的な関数を用いてブロックごとの重み（Alpha）配列を自動生成します。")
+
+        with gr.Row():
+            arch_radio = gr.Radio(
+                choices=["SD1.5 (26 Blocks)", "SDXL (20 Blocks)"],
+                value="SD1.5 (26 Blocks)",
+                label="Target Architecture",
+            )
+            base_slider = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, value=0.5, label="BASE Block Value")
+            mid_slider = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, value=0.5, label="MID Block Value")
+
+        with gr.Row():
+            with gr.Column():
+                gr.Markdown("#### IN Blocks")
+                in_curve = gr.Dropdown(
+                    choices=["Flat", "Linear", "Sigmoid", "Cosine"], value="Linear", label="Curve Type"
+                )
+                with gr.Row():
+                    in_start = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, value=0.0, label="Start")
+                    in_end = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, value=0.5, label="End")
+            with gr.Column():
+                gr.Markdown("#### OUT Blocks")
+                out_curve = gr.Dropdown(
+                    choices=["Flat", "Linear", "Sigmoid", "Cosine"], value="Linear", label="Curve Type"
+                )
+                with gr.Row():
+                    out_start = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, value=0.5, label="Start")
+                    out_end = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, value=1.0, label="End")
+
+        with gr.Row():
+            plot_output = gr.LinePlot(
+                x="Index", y="Alpha", tooltip=["Block", "Alpha"], title="Alpha Weight Curve", width=800, height=300
+            )
+
+        with gr.Row():
+            generated_mbw_text = gr.Textbox(label="Generated MBW Array", interactive=False)
+
+        with gr.Row():
+            apply_to_a_btn = gr.Button("Apply to Model A")
+            apply_to_b_btn = gr.Button("Apply to Model B")
+
+        def update_curve(arch, base_v, in_c, in_s, in_e, mid_v, out_c, out_s, out_e):
+            arr = generate_mbw_array(arch, base_v, in_c, in_s, in_e, mid_v, out_c, out_s, out_e)
+            df = build_plot_data(arr, arch)
+            text_val = ",".join(map(str, arr))
+            return df, text_val
+
+        inputs_list = [arch_radio, base_slider, in_curve, in_start, in_end, mid_slider, out_curve, out_start, out_end]
+
+        # イベントバインディング
+        for ctrl in inputs_list:
+            ctrl.change(fn=update_curve, inputs=inputs_list, outputs=[plot_output, generated_mbw_text])
+
+        # 初期表示用の更新（ダミーイベント）
+        # gradioでは通常loadイベント等で初期化するが、ここでは表示時に関数を呼んで初期値を入れる
+        arch_radio.change(fn=update_curve, inputs=inputs_list, outputs=[plot_output, generated_mbw_text])
+
+    # --- 既存の MBW 入力 UI ---
     with gr.Row():
         with gr.Column():
             gr.Markdown("#### Model A Weights")
@@ -36,6 +168,10 @@ def render_mbw_each_tab():
                 lines=2,
                 value="0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
             )
+
+    # Applyボタンのアクション
+    apply_to_a_btn.click(lambda x: x, inputs=[generated_mbw_text], outputs=[mbw_a])
+    apply_to_b_btn.click(lambda x: x, inputs=[generated_mbw_text], outputs=[mbw_b])
 
     with gr.Row():
         with gr.Accordion("Advanced Options", open=False):

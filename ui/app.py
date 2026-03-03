@@ -17,6 +17,7 @@ from ui.components.dice_roll import render_dice_roll_tab
 from ui.components.presets import render_presets_tab
 from ui.components.lora_ops import render_lora_ops_tab
 from ui.components.poison_merge import render_poison_merge_tab
+from ui.components.ab_test import render_ab_test_tab
 from ui.utils import get_model_list, get_model_path
 
 from ui.components.queue_ui import render_queue_tab
@@ -177,6 +178,10 @@ def create_ui():
             # タブ 8: XYZ Plot
             with gr.TabItem("XYZ Plot"):
                 render_xyz_plot_tab()
+
+            # タブ 8.5: A/B Test Merge
+            with gr.TabItem("A/B Test Merge"):
+                render_ab_test_tab()
 
             # タブ 9: Visual MBW
             with gr.TabItem("Visual MBW"):

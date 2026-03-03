@@ -1,8 +1,7 @@
 import os
 import gradio as gr
-import tempfile
 import yaml
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from ui.utils import get_model_list, get_model_path
 
 
@@ -18,33 +17,23 @@ def render_xyz_plot_tab():
 
             x_type = gr.Dropdown(
                 label="X Type",
-                choices=["Velocity", "Strategy", "CFG Scale", "Steps"],
+                choices=["Velocity", "Strategy", "CFG Scale", "Steps", "Model Order"],
                 value="Velocity",
             )
-            x_values = gr.Textbox(
-                label="X Values (comma separated)", value="0.25, 0.5, 0.75"
-            )
+            x_values = gr.Textbox(label="X Values (comma separated)", value="0.25, 0.5, 0.75")
 
             y_type = gr.Dropdown(
                 label="Y Type",
-                choices=["Velocity", "Strategy", "CFG Scale", "Steps"],
+                choices=["Velocity", "Strategy", "CFG Scale", "Steps", "Model Order"],
                 value="Strategy",
             )
-            y_values = gr.Textbox(
-                label="Y Values (comma separated)", value="mix, addition"
-            )
+            y_values = gr.Textbox(label="Y Values (comma separated)", value="mix, addition")
 
             with gr.Accordion("Generation Settings", open=False):
                 prompt = gr.Textbox(label="Prompt", value="A beautiful landscape")
-                negative_prompt = gr.Textbox(
-                    label="Negative Prompt", value="blurry, low quality"
-                )
-                width = gr.Slider(
-                    label="Width", minimum=256, maximum=1024, step=64, value=512
-                )
-                height = gr.Slider(
-                    label="Height", minimum=256, maximum=1024, step=64, value=512
-                )
+                negative_prompt = gr.Textbox(label="Negative Prompt", value="blurry, low quality")
+                width = gr.Slider(label="Width", minimum=256, maximum=1024, step=64, value=512)
+                height = gr.Slider(label="Height", minimum=256, maximum=1024, step=64, value=512)
                 fixed_seed = gr.Number(label="Seed (-1 or 0 for random)", value=-1, precision=0)
 
             generate_btn = gr.Button("Generate XY Grid", variant="primary")
@@ -60,17 +49,16 @@ def render_xyz_plot_tab():
         import sys
         import random
 
-        sys.path.insert(
-            0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        )
+        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
         from main import main as merger_main
         from module.generation import generate_image
         from module.extension_manager import load_extensions
+
         load_extensions()
 
         x_vals = [x.strip() for x in xv.split(",")]
         y_vals = [y.strip() for y in yv.split(",")]
-        
+
         actual_seed = int(seed_in) if int(seed_in) > 0 else random.randint(1, 1125899906842624)
 
         def parse_val(vtype, val):
@@ -110,13 +98,26 @@ def render_xyz_plot_tab():
                 if yt == "Steps":
                     steps = y_val
 
-                if xt in ["Velocity", "Strategy"] or yt in ["Velocity", "Strategy"]:
+                # Check for Model Order
+                left_model = get_model_path(ma)
+                right_model = get_model_path(mb)
+
+                model_order = "A->B"
+                if xt == "Model Order":
+                    model_order = str(x_val).strip()
+                elif yt == "Model Order":
+                    model_order = str(y_val).strip()
+
+                if model_order == "B->A":
+                    left_model, right_model = right_model, left_model
+
+                if xt in ["Velocity", "Strategy", "Model Order"] or yt in ["Velocity", "Strategy", "Model Order"]:
                     config = {
-                        "target_model": get_model_path(ma),
+                        "target_model": left_model,
                         "models": [
                             {
-                                "left": get_model_path(ma),
-                                "right": get_model_path(mb),
+                                "left": left_model,
+                                "right": right_model,
                                 "strategy": strategy,
                                 "velocity": velocity,
                                 "key_patterns": ["."],
@@ -134,7 +135,7 @@ def render_xyz_plot_tab():
                     import glob
 
                     files = glob.glob(os.path.join(tmp_dir, "*.safetensors"))
-                    out_model = max(files, key=os.path.getctime)
+                    out_model = max(files, key=os.path.getctime) if files else get_model_path(ma)
                 else:
                     out_model = get_model_path(ma)
 
@@ -160,8 +161,6 @@ def render_xyz_plot_tab():
         grid_w = len(x_vals) * w
         grid_h = len(y_vals) * h
         grid_img = Image.new("RGB", (grid_w, grid_h))
-
-        from PIL import ImageDraw, ImageFont
 
         draw = ImageDraw.Draw(grid_img)
 

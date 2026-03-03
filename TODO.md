@@ -61,30 +61,30 @@
 
 #### 2.2 針山マージ — Base と Alpha の微調整による精密マージ
 
-- [ ] Alpha 値のブロック別グラデーション設定
-  - [ ] ブロックごとの weight を連続関数（線形, シグモイド, カスタムカーブ）で自動生成
-  - [ ] IN/MID/OUT 各セクション独立のカーブ設定
-- [ ] プレビュー付きのインタラクティブ調整 UI
-  - [ ] Alpha カーブの可視化グラフ（Plotly or matplotlib）
-  - [ ] スライダー操作で即座にグラフ更新
-  - [ ] 調整結果を MBW 重み文字列として出力（既存の `mbw_each` にそのまま渡せる形）
+- [x] Alpha 値のブロック別グラデーション設定
+  - [x] ブロックごとの weight を連続関数（線形, シグモイド, カスタムカーブ）で自動生成
+  - [x] IN/MID/OUT 各セクション独立のカーブ設定
+- [x] プレビュー付きのインタラクティブ調整 UI
+  - [x] Alpha カーブの可視化グラフ（pandas, gr.LinePlot等）
+  - [x] スライダー操作で即座にグラフ更新
+  - [x] 調整結果を MBW 重み文字列として出力（既存の `mbw_each` にそのまま渡せる形）
 
 > **[考察]** MBW Each にはブロック別の重みを手入力するが「直感的でない」。
 > 針山マージは「カーブを視覚的に調整→26 値の MBW 配列を自動生成」するワークフロー。
-> `ui/components/mbw_each.py` の既存 UI を拡張し、プリセットカーブ + カスタムカーブエディタを追加する。
+> `ui/components/mbw_each.py` の既存 UI を拡張し、プリセットカーブ + カスタムカーブエディタを追加完了。
 
 #### 2.3 A/B テストマージ — モデル入替比較
 
-- [ ] XY Plot 風の比較画像グリッド生成（A→B vs B→A を同一条件で並列表示）
-  - [ ] 既存 `xyz_plot.py` の `run_xy` 関数を汎用化してパラメータ軸を拡張
-- [ ] 同一 Seed・同一プロンプトでの Side-by-Side 比較ビュー
-  - [ ] `generation.py` で `seed` の固定が既に実装済み → これを比較 UI と連携
-  - [ ] 左右並置、スライダーによるフェード比較
-- [ ] メトリクス（CLIP Score, FID 等）による定量比較
-  - [ ] CLIP Score: `transformers` の CLIP モデルで計算
-  - [ ] FID: `torchmetrics` or `clean-fid` ライブラリで計算
-  - [ ] IS (Inception Score): オプション対応
-  - [ ] 比較結果をレーダーチャートで可視化
+- [x] XY Plot 風の比較画像グリッド生成（A→B vs B→A を同一条件で並列表示）
+  - [x] 既存 `xyz_plot.py` の `run_xy` 関数を汎用化してパラメータ軸を拡張
+- [x] 同一 Seed・同一プロンプトでの Side-by-Side 比較ビュー
+  - [x] `generation.py` で `seed` の固定が既に実装済み → これを比較 UI と連携
+  - [x] 左右並置、スライダーによるフェード比較
+- [x] メトリクス（CLIP Score, FID 等）による定量比較
+  - [x] CLIP Score: `transformers` の CLIP モデルで計算
+  - [x] FID: `torchmetrics` or `clean-fid` ライブラリで計算
+  - [x] IS (Inception Score): オプション対応
+  - [x] 比較結果をレーダーチャートで可視化
 
 > **[考察]** XY Plot (`xyz_plot.py`) は既に velocity / strategy / CFG / Steps の軸を持つが、
 > 「モデル A/B の入れ替え」自体を軸に取る機能がない。`x_type` の選択肢に `Model Order` を追加すれば拡張可能。
