@@ -1,7 +1,4 @@
-import os
 import gradio as gr
-import tempfile
-import yaml
 from ui.utils import get_model_list, get_model_path
 
 
@@ -78,22 +75,11 @@ def render_mbw_each_tab():
             if use_adv and out:
                 config["output_name"] = out
 
-            import sys
+            from module.queue_manager import queue_manager
 
-            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-            from main import main as merger_main
-            from module.extension_manager import load_extensions
+            task_id = queue_manager.add_task(config, out, task_name="MBW Each")
 
-            load_extensions()
-
-            with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
-                yaml.dump(config, f)
-                tmp_cfg = f.name
-
-            out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "output"))
-            merger_main(tmp_cfg, out_dir)
-
-            return f"MBW Each merge completed successfully.\nSaved to: {os.path.join(out_dir, out)}"
+            return f"MBW Each merge task '{task_id}' added to queue.\nOutput will be: {out}"
 
         except Exception as e:
             return f"Error: {str(e)}"

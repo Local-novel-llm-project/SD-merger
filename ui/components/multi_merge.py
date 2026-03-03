@@ -1,8 +1,4 @@
-import os
 import gradio as gr
-import tempfile
-import yaml
-import logging
 
 
 def parse_multi_merge_command(cmd_text: str):
@@ -45,9 +41,7 @@ def parse_multi_merge_command(cmd_text: str):
                 mbw_b[1 + idx] = float(val)
             elif key == "M_00":
                 mbw_a[13] = float(val)
-                mbw_b[13] = 1.0 - float(
-                    val
-                )  # M_00 はAの比率を入れ、Bを補完する簡易実装例
+                mbw_b[13] = 1.0 - float(val)  # M_00 はAの比率を入れ、Bを補完する簡易実装例
             elif key.startswith("OUT_A_"):
                 idx = int(key.split("_")[-1])
                 mbw_a[14 + idx] = float(val)
@@ -92,14 +86,7 @@ def render_multi_merge_tab():
         if not ops:
             return "No valid commands parsed."
 
-        import sys
-
-        sys.path.insert(
-            0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        )
-        from main import main as merger_main
-        from module.extension_manager import load_extensions
-        load_extensions()
+        from module.queue_manager import queue_manager
 
         log_msgs = []
         for i, op in enumerate(ops):
@@ -107,20 +94,10 @@ def render_multi_merge_tab():
             out_name = op.pop("output_name", f"batch_merged_{i}.safetensors")
 
             try:
-                with tempfile.NamedTemporaryFile(
-                    "w", delete=False, suffix=".yaml"
-                ) as f:
-                    yaml.dump(config, f)
-                    tmp_cfg = f.name
-
-                out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "output"))
-                # ここではファイル名を直接指定する仕組みが main.py にはないため、一時的に generate_filename をフックするか出力後にリネームする必要があるが、一旦標準の流れを実行。
-                merger_main(tmp_cfg, out_dir)
-                log_msgs.append(
-                    f"Completed operation {i + 1}: Output expected around {out_dir}"
-                )
+                task_id = queue_manager.add_task(config, out_name, task_name=f"Batch Merge {i+1}")
+                log_msgs.append(f"Queued operation {i + 1} as task '{task_id}': Output expected as {out_name}")
             except Exception as e:
-                log_msgs.append(f"Error in operation {i + 1}: {str(e)}")
+                log_msgs.append(f"Error queuing operation {i + 1}: {str(e)}")
 
         return "\n".join(log_msgs)
 

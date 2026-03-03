@@ -11,13 +11,16 @@ from ui.components.multi_merge import render_multi_merge_tab
 from ui.components.generation import render_generation_tab
 from ui.components.analysis import render_analysis_tab
 from ui.components.history import render_history_tab
-from module.history import save_history
 from ui.components.xyz_plot import render_xyz_plot_tab
 from ui.components.elemental_merge import render_elemental_merge_tab
 from ui.components.dice_roll import render_dice_roll_tab
 from ui.components.presets import render_presets_tab
 from ui.components.lora_ops import render_lora_ops_tab
+from ui.components.poison_merge import render_poison_merge_tab
 from ui.utils import get_model_list, get_model_path
+
+from ui.components.queue_ui import render_queue_tab
+from module.queue_manager import queue_manager
 
 
 def create_ui():
@@ -25,6 +28,9 @@ def create_ui():
     from module.extension_manager import load_extensions
 
     load_extensions()
+
+    # 起動時にキューワーカーを開始
+    queue_manager.start_worker()
 
     with gr.Blocks(title="SD-merger UI") as app:
         gr.Markdown("# SD-merger")
@@ -95,17 +101,6 @@ def create_ui():
                     if not a or not b:
                         return "Model A and Model B are required."
 
-                    import sys
-
-                    sys.path.insert(
-                        0,
-                        os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
-                    )
-                    from main import main as merger_main
-                    import tempfile
-                    import yaml
-
-                    # YAML configを一時ファイルに生成
                     target_model_path = get_model_path(c) if c else get_model_path(a)
                     left_model_path = get_model_path(a)
                     right_model_path = get_model_path(b)
@@ -129,26 +124,14 @@ def create_ui():
                         config["bake_in_vae"] = get_model_path(vae)
                     if use_adv and out:
                         config["output_name"] = out
+                    else:
+                        out = f"queue_{int(vel * 100)}_{strat}.safetensors"
 
                     try:
-                        with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
-                            yaml.dump(config, f)
-                            tmp_cfg = f.name
-
-                        # 実行
-                        out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models", "output"))
-                        merger_main(tmp_cfg, out_dir)
-                        save_history({"config": config, "output_name": out, "status": "Success"})
-                        return f"Merge completed successfully. Saved to {out_dir}"
+                        task_id = queue_manager.add_task(config, out, task_name=f"Merge: {strat}")
+                        return f"Merge task '{task_id}' added to queue. Output will be {out}"
                     except Exception as e:
-                        save_history(
-                            {
-                                "config": config,
-                                "output_name": out,
-                                "status": f"Failed: {e}",
-                            }
-                        )
-                        return f"Error during merge: {e}"
+                        return f"Error queuing merge: {e}"
 
                 merge_btn.click(
                     run_merge,
@@ -189,7 +172,7 @@ def create_ui():
 
             # タブ 7: History
             with gr.TabItem("History"):
-                render_history_tab()
+                history_refresh_btn, history_rerun_btn, history_table = render_history_tab()
 
             # タブ 8: XYZ Plot
             with gr.TabItem("XYZ Plot"):
@@ -206,6 +189,14 @@ def create_ui():
             # タブ 11: Presets
             with gr.TabItem("Presets"):
                 render_presets_tab()
+
+            # タブ 12: Poison Merge
+            with gr.TabItem("Poison Merge"):
+                render_poison_merge_tab()
+
+            # タブ 13: Queue Manager
+            with gr.TabItem("Tasks Queue"):
+                render_queue_tab()
 
     return app
 

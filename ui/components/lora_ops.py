@@ -1,8 +1,5 @@
 import os
 import gradio as gr
-import yaml
-import tempfile
-from module.history import save_history
 from ui.utils import get_model_list, get_model_path
 
 
@@ -21,17 +18,13 @@ def render_lora_ops_tab():
                         label="Tuned Model (Finetuned)",
                         choices=model_list,
                     )
-                    extract_output = gr.Textbox(
-                        label="Output Filename", value="extracted_lora.safetensors"
-                    )
+                    extract_output = gr.Textbox(label="Output Filename", value="extracted_lora.safetensors")
 
                 with gr.Column(scale=1):
                     dim = gr.Number(label="Network Dim (Rank)", value=128, precision=0)
                     conv_dim = gr.Number(label="Conv Dim", value=0, precision=0)
                     alpha = gr.Number(label="Alpha", value=1.0)
-                    device = gr.Dropdown(
-                        label="Device", choices=["cpu", "cuda"], value="cpu"
-                    )
+                    device = gr.Dropdown(label="Device", choices=["cpu", "cuda"], value="cpu")
                     save_precision = gr.Dropdown(
                         label="Save Precision",
                         choices=["float", "fp16", "bf16"],
@@ -57,7 +50,13 @@ def render_lora_ops_tab():
                                 "type": "extract",
                                 "base_model": get_model_path(base),
                                 "tuned_model": get_model_path(tuned),
-                                "output": os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "output", out)) if not os.path.isabs(out) else os.path.abspath(out),
+                                "output": (
+                                    os.path.abspath(
+                                        os.path.join(os.path.dirname(__file__), "..", "..", "models", "output", out)
+                                    )
+                                    if not os.path.isabs(out)
+                                    else os.path.abspath(out)
+                                ),
                                 "dim": int(d),
                                 "conv_dim": int(cd) if cd > 0 else None,
                                 "alpha": float(a),
@@ -102,9 +101,7 @@ def render_lora_ops_tab():
                         value="1.0, 1.0",
                         placeholder="1.0, 0.5",
                     )
-                    merge_output = gr.Textbox(
-                        label="Output Filename", value="merged_lora.safetensors"
-                    )
+                    merge_output = gr.Textbox(label="Output Filename", value="merged_lora.safetensors")
 
                 with gr.Column(scale=1):
                     precision = gr.Dropdown(
@@ -153,7 +150,13 @@ def render_lora_ops_tab():
                                 "type": "merge",
                                 "models": model_paths,
                                 "ratios": ratio_list,
-                                "output": os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "output", out)) if not os.path.isabs(out) else os.path.abspath(out),
+                                "output": (
+                                    os.path.abspath(
+                                        os.path.join(os.path.dirname(__file__), "..", "..", "models", "output", out)
+                                    )
+                                    if not os.path.isabs(out)
+                                    else os.path.abspath(out)
+                                ),
                                 "precision": prec,
                                 "save_precision": s_prec,
                                 "concat": conc,
@@ -184,29 +187,10 @@ def render_lora_ops_tab():
 
 
 def _run_lora_config(config, out_name, op_name):
-    import sys
-
-    sys.path.insert(
-        0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-    )
-    from main import main as merger_main
-    from module.extension_manager import load_extensions
-    load_extensions()
+    from module.queue_manager import queue_manager
 
     try:
-        with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
-            yaml.dump(config, f)
-            tmp_cfg = f.name
-
-        out_dir = os.path.dirname(os.path.abspath(out_name))
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir, exist_ok=True)
-
-        merger_main(tmp_cfg, out_dir)
-        save_history({"config": config, "output_name": out_name, "status": "Success"})
-        return f"LoRA {op_name} completed successfully. Saved to {os.path.abspath(out_name)}"
+        task_id = queue_manager.add_task(config, out_name, task_name=f"LoRA {op_name}")
+        return f"LoRA {op_name} task '{task_id}' added to queue. Output will be {out_name}"
     except Exception as e:
-        save_history(
-            {"config": config, "output_name": out_name, "status": f"Failed: {e}"}
-        )
-        return f"Error during LoRA {op_name}: {e}"
+        return f"Error queuing LoRA {op_name}: {e}"
