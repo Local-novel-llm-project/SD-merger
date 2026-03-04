@@ -102,65 +102,55 @@
 > **リファレンス実装**: `refrence/sd-webui-bayesian-merger/` に実際のコードを追加済み。
 > 以下のタスクはリファレンスの設計を SD-merger アーキテクチャに移植する方針。
 
-- [ ] **最適化エンジンの移植** (`module/bayesian_optimizer/`)
-  - [ ] 抽象基底クラス `Optimiser` の移植
+- [x] **最適化エンジンの移植** (`module/bayesian_optimizer/`)
+  - [x] 抽象基底クラス `Optimiser` の移植
     - リファレンスの `optimiser.py` を参考に、最適化ループ（探索→活用）を実装
     - `sd_target_function()`: マージ → 画像生成 → スコアリング → 平均スコア返却
-  - [ ] 3 種のオプティマイザ実装
+  - [x] 3 種のオプティマイザ実装
     - `BayesOptimiser`: `bayesian-optimization` ライブラリ（Gaussian Process）
       - Latin Hypercube Sampling (LHS) による初期探索オプション
       - `SequentialDomainReductionTransformer` による探索空間の逐次縮小
     - `TPEOptimiser`: `hyperopt` ライブラリ（Tree-structured Parzen Estimator）
     - `ATPEOptimiser`: `hyperopt.atpe`（Adaptive TPE）
-  - [ ] UI からのオプティマイザ選択ドロップダウン
-- [ ] **パラメータ空間管理** (`module/bayesian_optimizer/bounds.py`)
-  - [ ] 探索空間の定義（各ブロック重み 0.0〜1.0 + `base_alpha`）
+  - [x] UI からのオプティマイザ選択ドロップダウン
+- [x] **パラメータ空間管理** (`module/bayesian_optimizer/bounds.py`)
+  - [x] 探索空間の定義（各ブロック重み 0.0〜1.0 + `base_alpha`）
     - リファレンスの `Bounds` クラスを参考に、26 パラメータ（IN12 + MID1 + OUT12 + base_alpha）の空間定義
-  - [ ] **Freeze 機能**: 特定ブロックの重みを固定値に凍結して探索対象外にする
-  - [ ] **Group 機能**: 複数ブロックをグループ化し、同一の重みとして探索する（探索次元の削減）
-  - [ ] **Custom Range 機能**: ブロックごとに探索範囲（上下限）をカスタマイズ
-  - [ ] UI 上でのパラメータ空間設定（freeze/group/range の視覚的な設定）
-- [ ] **スコアリングシステム** (`module/bayesian_optimizer/scorer.py`)
-  - [ ] CLIP Aesthetic Score（`ViT-L/14` + `AestheticPredictor` ニューラルネット）
+  - [x] **Freeze 機能**: 特定ブロックの重みを固定値に凍結して探索対象外にする
+  - [x] **Group 機能**: 複数ブロックをグループ化し、同一の重みとして探索する（探索次元の削減）
+  - [x] **Custom Range 機能**: ブロックごとに探索範囲（上下限）をカスタマイズ
+  - [x] UI 上でのパラメータ空間設定（freeze/group/range の視覚的な設定）
+- [x] **スコアリングシステム** (`module/bayesian_optimizer/scorer.py`)
+  - [x] CLIP Aesthetic Score（`ViT-L/14` + `AestheticPredictor` ニューラルネット）
     - リファレンスの `laion` / `chad` スコアラーを参考に実装
     - スコアラーモデルの自動ダウンロード機能
-  - [ ] Manual Scoring（画像を表示してユーザーが手動スコア入力）
-  - [ ] ペイロードごとの `score_weight`（重み付きスコア平均）
+  - [x] Manual Scoring（画像を表示してユーザーが手動スコア入力）
+  - [x] ペイロードごとの `score_weight`（重み付きスコア平均）
   - [ ] **将来拡張**: FID / IS / ユーザー定義 Python 関数
-- [ ] **目的関数のコールバック設計**
-  - [ ] `sd_target_function()` の実装
+- [x] **目的関数のコールバック設計**
+  - [x] `sd_target_function()` の実装
     - SD-merger の `main()` を呼び出してマージ → `generation.py` で画像生成 → スコアリング
     - リファレンスは WebUI API (`requests.post`) 依存だが、SD-merger では直接 Python API を呼び出す
-  - [ ] 複数プロンプト（ペイロード）での一括生成・スコアリング
+  - [x] 複数プロンプト（ペイロード）での一括生成・スコアリング
     - リファレンスの `Prompter` を参考に、YAML ペイロードテンプレート管理
-  - [ ] イテレーション情報のリアルタイム表示（warmup / optimisation フェーズ表示）
-- [ ] **結果の可視化・保存**
-  - [ ] 収束プロット（スコア推移グラフ）— リファレンスの `artist.py` `convergence_plot()` 参考
-  - [ ] 最適 UNet 重み分布の可視化 — リファレンスの `draw_unet()` 参考
-  - [ ] ベストパラメータの自動保存（`best.log` + レシピ形式への変換）
-  - [ ] 最適パラメータでの最終マージモデル保存オプション
+  - [x] イテレーション情報のリアルタイム表示（warmup / optimisation フェーズ表示）
+- [x] **結果の可視化・保存**
+  - [x] 収束プロット（スコア推移グラフ）— リファレンスの `artist.py` `convergence_plot()` 参考
+  - [x] 最適 UNet 重み分布の可視化 — リファレンスの `draw_unet()` 参考
+  - [x] ベストパラメータの自動保存（`best.log` + レシピ形式への変換）
+  - [x] 最適パラメータでの最終マージモデル保存オプション
 
 > **[考察]** リファレンスの `sd-webui-bayesian-merger` はアーキテクチャ的に以下の特徴がある:
 >
 > 1. **WebUI API 依存**: `merger.py` は `requests.post(url + "/bbwm/merge-models")` で sd-webui にマージを委譲。
->    SD-merger では直接 `sd_mecha.merge()` を呼び出す形に書き換える必要がある。
-> 2. **Hydra 設定管理**: `omegaconf.DictConfig` ベース。SD-merger の YAML 設定体系に合わせて変換が必要。
+>    SD-merger では直接 `sd_mecha.merge()` を呼び出す形に書き換える（完了）。
+> 2. **Hydra 設定管理**: `omegaconf.DictConfig` ベース。SD-merger の YAML 設定体系に合わせて変換が必要（完了）。
 > 3. **3 種のオプティマイザ**: Bayes（`bayesian-optimization`）、TPE/ATPE（`hyperopt`）が実装済み。
->    いずれも `optimise()` + `postprocess()` の統一インターフェースを持つ。
+>    いずれも `optimise()` + `postprocess()` の統一インターフェースを持つ（完了）。
 > 4. **パラメータ空間の柔軟性**: `Bounds` クラスが freeze / group / custom_range を組み合わせた
->    高度なパラメータ空間管理を提供。これは MBW Each の手動調整を自動化する上で重要。
+>    高度なパラメータ空間管理を提供。これは MBW Each の手動調整を自動化する上で重要（完了）。
 > 5. **依存ライブラリ**: `bayesian-optimization`, `hyperopt`, `scipy` (LHS), `clip`, `safetensors` が必要。
->    `requirements.txt` への追加が必要。
-
-#### 3.2 SuperAutoMerger 連携 — 外部自動マージツールとの統合
-
-- [ ] パラメータ空間の自動探索
-  - [ ] Optuna ベースのハイパーパラメータ最適化
-  - [ ] 探索結果の可視化（Optuna Dashboard 連携 or 独自プロット）
-- [ ] 探索結果のレシピへのフィードバック
-  - [ ] 最良パラメータをレシピ形式（1.1 のレシピ機能）で保存
-
----
+>    `requirements.txt` への追加（完了）。
 
 ### 4. ストラテジー選択の統一（ベース機能追加）
 
