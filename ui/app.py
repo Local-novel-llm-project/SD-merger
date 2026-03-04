@@ -34,19 +34,70 @@ def create_ui():
     # 起動時にキューワーカーを開始
     queue_manager.start_worker()
 
-    with gr.Blocks(title="SD-merger UI") as app:
+    with gr.Blocks(
+        title="SD-merger UI",
+        theme=gr.themes.Soft(),
+        head="""
+<style>
+/* Optional custom CSS overrides for better appearance */
+.gradio-container { max-width: 1400px !important; }
+</style>
+<script>
+// Keyboard shortcut handling
+document.addEventListener('keydown', function(e) {
+    // Ctrl+Enter or Cmd+Enter to trigger the primary button on active tab
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const primaryBtn = document.querySelector('.tabitem[style*="block"] button.primary');
+        if (primaryBtn) {
+            primaryBtn.click();
+            e.preventDefault();
+        }
+    }
+});
+</script>
+""",
+    ) as app:
         gr.Markdown("# SD-merger")
-        gr.Markdown("高機能・メモリ効率の高い sd-mecha ベースのモデルマージツール")
+        with gr.Row():
+            gr.Markdown("高機能・メモリ効率の高い sd-mecha ベースのモデルマージツール")
+            dark_mode_btn = gr.Button("🌓 Toggle Dark Mode", size="sm", scale=0)
+
+            # Use javascript to toggle dark mode class on body
+            dark_mode_btn.click(
+                None,
+                None,
+                None,
+                js="""
+                () => {
+                    document.body.classList.toggle('dark');
+                    const isDark = document.body.classList.contains('dark');
+                    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                }
+                """,
+            )
 
         with gr.Tabs():
             # タブ 1: 基本的なマージ (Supermerger風)
             with gr.TabItem("Merge Models"):
                 with gr.Row():
                     with gr.Column(scale=1):
+                        with gr.Row():
+                            refresh_model_btn = gr.Button("🔄 Refresh Models", size="sm")
+
                         model_list = get_model_list()
                         model_a = gr.Dropdown(label="Model A (Left)", choices=model_list)
                         model_b = gr.Dropdown(label="Model B (Right)", choices=model_list)
                         model_c = gr.Dropdown(label="Model C (Base/Target, optional)", choices=model_list)
+
+                        def refresh_dropdowns():
+                            updated_list = get_model_list()
+                            return [
+                                gr.update(choices=updated_list),
+                                gr.update(choices=updated_list),
+                                gr.update(choices=updated_list),
+                            ]
+
+                        refresh_model_btn.click(refresh_dropdowns, inputs=[], outputs=[model_a, model_b, model_c])
 
                     with gr.Column(scale=1):
                         strategy = gr.Dropdown(

@@ -236,23 +236,23 @@
 
 ### 6. UI/UX 改善
 
-- [ ] マージ進捗のリアルタイムプログレスバー
-  - [ ] `sd_mecha` のコールバック or ログパースによる進捗取得
-  - [ ] Gradio `gr.Progress` コンポーネントとの連携
-- [ ] XYZ Plot の Z 軸対応（3 次元グリッド生成）
-  - [ ] Z 軸パラメータ追加（タブ切替 or アニメーション GIF で 3 次元表現）
-  - [ ] 生成画像数の爆発に対するガードレール（上限設定、推定時間の事前表示）
-- [ ] モデル分析の可視化強化
-  - [ ] ヒートマップ: 全ブロック × 全メトリクスの2D可視化
-  - [ ] レーダーチャート: IN/MID/OUT の特性バランスを直感的に把握
-  - [ ] **SDXL 対応**: 現在 `analysis.py` は SD1.5 の `input_blocks/output_blocks` キー構造のみ対応。SDXL の `conditioner.embedders.1` 等の SDXL 固有キーへの対応が必要
-- [ ] ダークモード / テーマ切り替え
-  - [ ] Gradio の `theme` パラメータで対応（`gr.themes.Soft()` 等）
-- [ ] キーボードショートカット対応
-  - [ ] Gradio の JavaScript カスタマイズで実装
-- [ ] **モデル一覧の動的リフレッシュ**
-  - [ ] 現在 `get_model_list()` はアプリ起動時に1回だけ呼ばれる → ファイル追加/削除時に自動更新
-  - [ ] Gradio Dropdown の `choices` を動的更新
+- [x] マージ進捗のリアルタイムプログレスバー
+  - [x] `sd_mecha` のコールバック or ログパースによる進捗取得
+  - [x] Gradio `gr.Progress` コンポーネントとの連携
+- [x] XYZ Plot の Z 軸対応（3 次元グリッド生成）
+  - [x] Z 軸パラメータ追加（タブ切替 or アニメーション GIF で 3 次元表現）
+  - [x] 生成画像数の爆発に対するガードレール（上限設定、推定時間の事前表示）
+- [x] モデル分析の可視化強化
+  - [x] ヒートマップ: 全ブロック × 全メトリクスの2D可視化
+  - [x] レーダーチャート: IN/MID/OUT の特性バランスを直感的に把握
+  - [x] **SDXL 対応**: 現在 `analysis.py` は SD1.5 の `input_blocks/output_blocks` キー構造のみ対応。SDXL の `conditioner.embedders.1` 等の SDXL 固有キーへの対応が必要
+- [x] ダークモード / テーマ切り替え
+  - [x] Gradio の `theme` パラメータで対応（`gr.themes.Soft()` 等）
+- [x] キーボードショートカット対応
+  - [x] Gradio の JavaScript カスタマイズで実装
+- [x] **モデル一覧の動的リフレッシュ**
+  - [x] 現在 `get_model_list()` はアプリ起動時に1回だけ呼ばれる → ファイル追加/削除時に自動更新
+  - [x] Gradio Dropdown の `choices` を動的更新
 
 > **[考察・新規追加]** `ui/utils.py` の `get_model_list()` は静的なリストを返す。
 > モデルフォルダの監視（`watchdog` ライブラリ）or ボタン押下でリフレッシュする仕組みが最低限必要。

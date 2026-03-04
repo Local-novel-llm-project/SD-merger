@@ -80,6 +80,8 @@ class QueueManager:
             "config": deepcopy(config),
             "output_name": output_name,
             "status": "pending",
+            "progress": 0.0,
+            "progress_desc": "Added to queue",
             "added_at": datetime.now().isoformat(),
             "started_at": None,
             "completed_at": None,
@@ -141,6 +143,8 @@ class QueueManager:
                     if task["status"] == "pending":
                         task_to_run = task
                         task["status"] = "running"
+                        task["progress"] = 0.0
+                        task["progress_desc"] = "Starting..."
                         task["started_at"] = datetime.now().isoformat()
                         break
 
@@ -202,10 +206,25 @@ class QueueManager:
                     for task in self.queue:
                         if task["id"] == task_to_run["id"]:
                             task["status"] = "completed" if success else "error"
+                            task["progress"] = 1.0 if success else task.get("progress", 0.0)
+                            task["progress_desc"] = "Completed" if success else f"Error: {error_msg}"
                             task["error"] = error_msg
                             task["completed_at"] = datetime.now().isoformat()
                             break
                 self.save_queue()
+
+    def update_task_progress(self, task_id: str, progress: float, desc: str = ""):
+        """指定したタスクの進捗と説明を更新する"""
+        with self._task_lock:
+            for task in self.queue:
+                if task["id"] == task_id:
+                    task["progress"] = max(0.0, min(1.0, float(progress)))
+                    if desc:
+                        task["progress_desc"] = desc
+                    break
+        # Option: periodically save or skip saving to reduce disk I/O during heavy processing
+        # We save here to ensure UI can reflect the latest state across boundaries if needed
+        self.save_queue()
 
     def start_worker(self):
         """ワーカーを起動する"""

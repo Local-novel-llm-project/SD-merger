@@ -24,6 +24,20 @@ def render_xyz_plot_tab():
 
             y_type = gr.Dropdown(
                 label="Y Type",
+                choices=["Velocity", "Strategy", "CFG Scale", "Steps", "Model Order", "None"],
+                value="Strategy",
+            )
+            y_values = gr.Textbox(label="Y Values (comma separated)", value="mix, addition")
+
+            z_type = gr.Dropdown(
+                label="Z Type",
+                choices=["Velocity", "Strategy", "CFG Scale", "Steps", "Model Order", "None"],
+                value="None",
+            )
+            z_values = gr.Textbox(label="Z Values (comma separated)", value="")
+
+            y_type = gr.Dropdown(
+                label="Y Type",
                 choices=["Velocity", "Strategy", "CFG Scale", "Steps", "Model Order"],
                 value="Strategy",
             )
@@ -40,9 +54,9 @@ def render_xyz_plot_tab():
             output_log = gr.Textbox(label="Log", interactive=False)
 
         with gr.Column(scale=2):
-            output_grid = gr.Image(label="XY Grid")
+            output_grid = gr.Image(label="XY(Z) Grid", type="filepath")
 
-    def run_xy(ma, mb, xt, xv, yt, yv, p, np, w, h, seed_in):
+    def run_xy(ma, mb, xt, xv, yt, yv, zt, zv, p, np, w, h, seed_in):
         if not ma or not mb:
             return None, "Model A and Model B required."
 
@@ -56,47 +70,66 @@ def render_xyz_plot_tab():
 
         load_extensions()
 
-        x_vals = [x.strip() for x in xv.split(",")]
-        y_vals = [y.strip() for y in yv.split(",")]
+        x_vals = [x.strip() for x in xv.split(",") if x.strip()]
+        y_vals = [y.strip() for y in yv.split(",") if y.strip()] if yt != "None" else ["None"]
+        z_vals = [z.strip() for z in zv.split(",") if z.strip()] if zt != "None" else ["None"]
 
         actual_seed = int(seed_in) if int(seed_in) > 0 else random.randint(1, 1125899906842624)
 
         def parse_val(vtype, val):
+            if val == "None":
+                return None
             if vtype in ["Velocity", "CFG Scale"]:
                 return float(val)
             if vtype in ["Steps"]:
                 return int(val)
             return val
 
-        images = []
         log = f"Using Seed: {actual_seed}\n"
 
         tmp_dir = os.path.abspath("./merged/xyz_tmp")
         os.makedirs(tmp_dir, exist_ok=True)
 
-        for y_idx, y_raw in enumerate(y_vals):
-            y_val = parse_val(yt, y_raw)
-            for x_idx, x_raw in enumerate(x_vals):
-                x_val = parse_val(xt, x_raw)
+        frames = []
 
-                velocity, strategy, cfg, steps = 0.5, "mix", 7.0, 20
+        for z_idx, z_raw in enumerate(z_vals):
+            z_val = parse_val(zt, z_raw)
+            images = []
 
-                if xt == "Velocity":
-                    velocity = x_val
-                if yt == "Velocity":
-                    velocity = y_val
-                if xt == "Strategy":
-                    strategy = x_val
-                if yt == "Strategy":
-                    strategy = y_val
-                if xt == "CFG Scale":
-                    cfg = x_val
-                if yt == "CFG Scale":
-                    cfg = y_val
-                if xt == "Steps":
-                    steps = x_val
-                if yt == "Steps":
-                    steps = y_val
+            for y_idx, y_raw in enumerate(y_vals):
+                y_val = parse_val(yt, y_raw)
+                for x_idx, x_raw in enumerate(x_vals):
+                    x_val = parse_val(xt, x_raw)
+
+                    velocity, strategy, cfg, steps = 0.5, "mix", 7.0, 20
+
+                    if xt == "Velocity":
+                        velocity = x_val
+                    if yt == "Velocity":
+                        velocity = y_val
+                    if zt == "Velocity":
+                        velocity = z_val
+
+                    if xt == "Strategy":
+                        strategy = x_val
+                    if yt == "Strategy":
+                        strategy = y_val
+                    if zt == "Strategy":
+                        strategy = z_val
+
+                    if xt == "CFG Scale":
+                        cfg = x_val
+                    if yt == "CFG Scale":
+                        cfg = y_val
+                    if zt == "CFG Scale":
+                        cfg = z_val
+
+                    if xt == "Steps":
+                        steps = x_val
+                    if yt == "Steps":
+                        steps = y_val
+                    if zt == "Steps":
+                        steps = z_val
 
                 # Check for Model Order
                 left_model = get_model_path(ma)
@@ -105,13 +138,16 @@ def render_xyz_plot_tab():
                 model_order = "A->B"
                 if xt == "Model Order":
                     model_order = str(x_val).strip()
-                elif yt == "Model Order":
+                if yt == "Model Order":
                     model_order = str(y_val).strip()
+                if zt == "Model Order":
+                    model_order = str(z_val).strip()
 
                 if model_order == "B->A":
                     left_model, right_model = right_model, left_model
 
-                if xt in ["Velocity", "Strategy", "Model Order"] or yt in ["Velocity", "Strategy", "Model Order"]:
+                merge_params = [xt, yt, zt]
+                if any(p in ["Velocity", "Strategy", "Model Order"] for p in merge_params):
                     config = {
                         "target_model": left_model,
                         "models": [
@@ -128,7 +164,7 @@ def render_xyz_plot_tab():
                     with open(cfg_file, "w") as f:
                         yaml.dump(config, f)
 
-                    log += f"Merging for {xt}={x_val}, {yt}={y_val}...\n"
+                    log += f"Merging for {xt}={x_val}, {yt}={y_val}, {zt}={z_val}...\n"
                     merger_main(cfg_file, tmp_dir)
 
                     # Find newest file in tmp_dir
@@ -139,7 +175,7 @@ def render_xyz_plot_tab():
                 else:
                     out_model = get_model_path(ma)
 
-                log += f"Generating image for {xt}={x_val}, {yt}={y_val}...\n"
+                log += f"Generating image for {xt}={x_val}, {yt}={y_val}, {zt}={z_val}...\n"
                 img = generate_image(
                     model_path=out_model,
                     prompt=p,
@@ -154,29 +190,48 @@ def render_xyz_plot_tab():
                 )
 
                 if img is None:
-                    return None, log + f"\nFailed to generate for {x_val}, {y_val}"
+                    return None, log + f"\nFailed to generate for {x_val}, {y_val}, {z_val}"
 
                 images.append(img)
 
-        grid_w = len(x_vals) * w
-        grid_h = len(y_vals) * h
-        grid_img = Image.new("RGB", (grid_w, grid_h))
+            grid_w = len(x_vals) * w
+            grid_h = len(y_vals) * h
+            grid_img = Image.new("RGB", (grid_w, grid_h))
 
-        draw = ImageDraw.Draw(grid_img)
+            draw = ImageDraw.Draw(grid_img)
 
-        for y_idx in range(len(y_vals)):
-            for x_idx in range(len(x_vals)):
-                idx = y_idx * len(x_vals) + x_idx
-                px = x_idx * w
-                py = y_idx * h
-                grid_img.paste(images[idx], (px, py))
+            for y_idy in range(len(y_vals)):
+                for x_idx in range(len(x_vals)):
+                    idx = y_idy * len(x_vals) + x_idx
+                    px = x_idx * w
+                    py = y_idy * h
+                    grid_img.paste(images[idx], (px, py))
 
-                # Draw labels
-                text = f"{xt}={x_vals[x_idx]}, {yt}={y_vals[y_idx]}"
-                draw.text((px + 10, py + 10), text, fill="white")
+                    # Draw labels
+                    text_parts = [f"{xt}={x_vals[x_idx]}"]
+                    if yt != "None":
+                        text_parts.append(f"{yt}={y_vals[y_idy]}")
+                    if zt != "None":
+                        text_parts.append(f"{zt}={z_val}")
+
+                    text = ", ".join(text_parts)
+                    draw.text((px + 10, py + 10), text, fill="white")
+
+            frames.append(grid_img)
+
+        # Output logic
+        if not frames:
+            return None, log + "\nNo images generated."
+
+        out_path = os.path.abspath(os.path.join("./merged", f"xyz_grid_{actual_seed}.gif"))
+        if len(frames) == 1:
+            out_path = out_path.replace(".gif", ".png")
+            frames[0].save(out_path)
+        else:
+            frames[0].save(out_path, save_all=True, append_images=frames[1:], duration=1500, loop=0)
 
         log += "Grid completed successfully!"
-        return grid_img, log
+        return out_path, log
 
     generate_btn.click(
         run_xy,
@@ -187,6 +242,8 @@ def render_xyz_plot_tab():
             x_values,
             y_type,
             y_values,
+            z_type,
+            z_values,
             prompt,
             negative_prompt,
             width,

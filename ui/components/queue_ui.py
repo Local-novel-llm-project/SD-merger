@@ -6,7 +6,9 @@ from module.queue_manager import queue_manager
 def get_queue_df() -> pd.DataFrame:
     queue = queue_manager.get_queue()
     if not queue:
-        return pd.DataFrame(columns=["ID", "Task Name", "Output Name", "Status", "Added At", "Error"])
+        return pd.DataFrame(
+            columns=["ID", "Task Name", "Output Name", "Status", "Progress", "Description", "Added At", "Error"]
+        )
 
     data = []
     for t in queue:
@@ -16,6 +18,8 @@ def get_queue_df() -> pd.DataFrame:
                 "Task Name": t.get("name", "Unknown"),
                 "Output Name": t.get("output_name", ""),
                 "Status": t["status"].upper(),
+                "Progress": f"{t.get('progress', 0.0) * 100:.1f}%",
+                "Description": t.get("progress_desc", ""),
                 "Added At": t.get("added_at", ""),
                 "Error": t.get("error", "") or "",
             }
@@ -43,9 +47,12 @@ def render_queue_tab():
 
     message = gr.Textbox(label="Message", interactive=False)
 
+    # Use gr.Timer to auto-refresh the queue table every 2 seconds
+    timer = gr.Timer(value=2)
+
     queue_table = gr.Dataframe(
         value=get_queue_df(),
-        headers=["ID", "Task Name", "Output Name", "Status", "Added At", "Error"],
+        headers=["ID", "Task Name", "Output Name", "Status", "Progress", "Description", "Added At", "Error"],
         interactive=False,
         wrap=True,
     )
@@ -60,6 +67,7 @@ def render_queue_tab():
         return df, q_status
 
     refresh_btn.click(on_refresh, inputs=[], outputs=[queue_table, queue_status_md])
+    timer.tick(on_refresh, inputs=[], outputs=[queue_table, queue_status_md])
 
     def on_pause():
         queue_manager.pause()

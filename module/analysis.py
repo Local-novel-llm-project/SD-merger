@@ -1,17 +1,15 @@
 import torch
 import safetensors.torch
 import matplotlib.pyplot as plt
-import io
-from PIL import Image
 import re
+import numpy as np
+import seaborn as sns
 
 
 def categorize_key(key):
     """Categorize standard SD unet keys into IN, MID, OUT blocks"""
     # SD 1.5 standard / diffusers standard
-    match_in = re.search(r"input_blocks\.(\d+)", key) or re.search(
-        r"down_blocks\.(\d+)", key
-    )
+    match_in = re.search(r"input_blocks\.(\d+)", key) or re.search(r"down_blocks\.(\d+)", key)
     if match_in:
         return f"IN{int(match_in.group(1)):02d}"
 
@@ -19,9 +17,7 @@ def categorize_key(key):
     if match_mid:
         return "MID00"
 
-    match_out = re.search(r"output_blocks\.(\d+)", key) or re.search(
-        r"up_blocks\.(\d+)", key
-    )
+    match_out = re.search(r"output_blocks\.(\d+)", key) or re.search(r"up_blocks\.(\d+)", key)
     if match_out:
         return f"OUT{int(match_out.group(1)):02d}"
 
@@ -30,6 +26,16 @@ def categorize_key(key):
 
     if "label_emb" in key or "class_emb" in key:
         return "COND"
+
+    # SDXL specific conditioning keys
+    if "conditioner" in key or "pooler" in key:
+        return "COND_XL"
+
+    # SDXL specific down/up blocks if not matched above
+    if re.search(r"down_blocks\.(\d+)", key):
+        return f"IN_XL{int(re.search(r'down_blocks\.(\d+)', key).group(1)):02d}"
+    if re.search(r"up_blocks\.(\d+)", key):
+        return f"OUT_XL{int(re.search(r'up_blocks\.(\d+)', key).group(1)):02d}"
 
     return "OTHER"
 
@@ -52,9 +58,7 @@ def analyze_models(model_a_path, model_b_path, metric="Cosine Similarity"):
         raise ValueError("No common keys found between the two models.")
 
     # Only process UNet or Transformer keys
-    unet_keys = [
-        k for k in common_keys if "diffusion_model" in k or "unet" in k or "model." in k
-    ]
+    unet_keys = [k for k in common_keys if "diffusion_model" in k or "unet" in k or "model." in k]
     if not unet_keys:
         unet_keys = list(common_keys)  # Fallback to all keys if no unet detected
 
@@ -80,9 +84,7 @@ def analyze_models(model_a_path, model_b_path, metric="Cosine Similarity"):
             if norm_a == 0 or norm_b == 0:
                 val = 1.0 if norm_a == norm_b else 0.0
             else:
-                val = torch.nn.functional.cosine_similarity(
-                    t_a_flat.unsqueeze(0), t_b_flat.unsqueeze(0)
-                ).item()
+                val = torch.nn.functional.cosine_similarity(t_a_flat.unsqueeze(0), t_b_flat.unsqueeze(0)).item()
         elif metric == "Euclidean Distance":
             val = torch.dist(t_a_flat, t_b_flat, p=2).item()
         elif metric == "Mean Absolute Difference":
@@ -115,32 +117,86 @@ def analyze_models(model_a_path, model_b_path, metric="Cosine Similarity"):
     sorted_blocks = sorted(aggregated.keys(), key=block_sort_key)
     sorted_values = [aggregated[b] for b in sorted_blocks]
 
-    # Plotting
-    fig, ax = plt.subplots(figsize=(12, 6))
+    # Plot 1: Bar Chart
+    fig_bar, ax = plt.subplots(figsize=(12, 6))
 
     colors = []
     for b in sorted_blocks:
-        if b.startswith("IN"):
+        if "IN" in b:
             colors.append("#3498db")
-        elif b.startswith("MID"):
+        elif "MID" in b:
             colors.append("#f1c40f")
-        elif b.startswith("OUT"):
+        elif "OUT" in b:
             colors.append("#e74c3c")
+        elif "COND" in b:
+            colors.append("#9b59b6")
         else:
             colors.append("#95a5a6")
 
-    bars = ax.bar(sorted_blocks, sorted_values, color=colors)
-
+    ax.bar(sorted_blocks, sorted_values, color=colors)
     ax.set_title(
         f"Model Difference Analysis ({metric})\n{model_a_path.split('/')[-1]} vs {model_b_path.split('/')[-1]}"
     )
     ax.set_ylabel(metric)
     ax.set_xlabel("UNet Blocks")
     plt.xticks(rotation=45, ha="right")
-
-    # Add grid
     ax.grid(axis="y", linestyle="--", alpha=0.7)
-
     plt.tight_layout()
 
-    return fig
+    # Plot 2: Heatmap (2D representation of data mapped into an arbitrary grid to show relative intensities)
+    fig_heat, ax_heat = plt.subplots(figsize=(10, 8))
+
+    # Create a 2D grid structure based on IN/MID/OUT categories and variations
+    # Simple structuring for heatmap: rows = block families (IN, MID, OUT, COND), cols = layers indices
+    heatmap_data = {}
+    for b, val in zip(sorted_blocks, sorted_values):
+        cat = "".join([c for c in b if not c.isdigit()])
+        idx_str = "".join([c for c in b if c.isdigit()])
+        idx = int(idx_str) if idx_str else 0
+
+        if cat not in heatmap_data:
+            heatmap_data[cat] = {}
+        heatmap_data[cat][idx] = val
+
+    all_indices = sorted(list(set(idx for cat_dict in heatmap_data.values() for idx in cat_dict.keys())))
+    cats = sorted(list(heatmap_data.keys()))
+
+    # Fill array
+    heat_arr = np.zeros((len(cats), len(all_indices)))
+    for i, c in enumerate(cats):
+        for j, idx in enumerate(all_indices):
+            heat_arr[i, j] = heatmap_data[c].get(idx, np.nan)  # nan where layer doesn't exist
+
+    sns.heatmap(heat_arr, cmap="viridis", xticklabels=all_indices, yticklabels=cats, annot=True, fmt=".2f", ax=ax_heat)
+    ax_heat.set_title(f"Block Differences Heatmap ({metric})")
+    plt.tight_layout()
+
+    # Plot 3: Radar Chart (Grouping into IN / MID / OUT / COND vectors)
+    fig_radar, ax_radar = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
+
+    # Aggregate values purely by IN, MID, OUT, COND categories for a neat radar
+    radar_cats = ["IN", "MID", "OUT", "COND", "TIME", "OTHER"]
+    radar_values = [0.0] * len(radar_cats)
+    radar_counts = [0] * len(radar_cats)
+
+    for b, val in zip(sorted_blocks, sorted_values):
+        for i, c in enumerate(radar_cats):
+            if c in b:
+                radar_values[i] += val
+                radar_counts[i] += 1
+                break
+
+    radar_means = [v / max(1, c) for v, c in zip(radar_values, radar_counts)]
+
+    # Close the polygon by appending first value to the end
+    angles = np.linspace(0, 2 * np.pi, len(radar_cats), endpoint=False).tolist()
+    radar_means += radar_means[:1]
+    angles += angles[:1]
+
+    ax_radar.plot(angles, radar_means, color="#e74c3c", linewidth=2, linestyle="solid")
+    ax_radar.fill(angles, radar_means, color="#e74c3c", alpha=0.4)
+    ax_radar.set_xticks(angles[:-1])
+    ax_radar.set_xticklabels(radar_cats)
+    ax_radar.set_title(f"Structural Imbalance Radar ({metric})", y=1.1)
+
+    return fig_bar, fig_heat, fig_radar
