@@ -6,13 +6,13 @@ ComfyUI を必要とせずに画像生成を実行する。
 
 import collections
 import gc
-import logging
 from pathlib import Path
 
 import torch
 from PIL import Image
 
-logger = logging.getLogger(__name__)
+from module.logging_config import logger
+from module.exceptions import GenerationError
 
 # --- モデルキャッシュ管理設定 ---
 MAX_CACHE_SIZE_GB = 10.0  # キャッシュするモデルの最大サイズ(GB)
@@ -277,4 +277,4 @@ def generate_image(
         import traceback
 
         traceback.print_exc()
-        return None
+        raise GenerationError(f"Image generation failed: {e}", original_error=e)

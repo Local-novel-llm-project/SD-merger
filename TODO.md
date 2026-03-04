@@ -264,6 +264,7 @@
 #### 7.1 テスト・CI/CD
 
 - [ ] ユニットテストの追加（`module/` 配下）
+  - [x] `config_schema.py`: Pydantic モデルのテスト
   - [ ] `calc_method.py`: 各ストラテジーの入出力テスト（小さなテンソルで検証）
   - [ ] `calc_target.py`: ターゲットストラテジーのテスト
   - [ ] `history.py`: ファイル I/O のテスト（一時ディレクトリ使用）
@@ -281,13 +282,13 @@
 
 #### 7.2 エラーハンドリングの統一
 
-- [ ] カスタム例外クラスの定義
-  - [ ] `module/exceptions.py` を新規作成
-  - [ ] `ConfigError`, `ModelLoadError`, `MergeError`, `ExtensionError` 等
-- [ ] 裸の `except` / `except Exception` の置き換え
-  - [ ] `presets.py` L27: `except:` → 適切なエラーハンドリング
-  - [ ] `generation.py` L55: `except Exception` → `except OSError`
-  - [ ] `extension_manager.py` のフック実行部: 例外時のフォールバック戦略を明確化
+- [x] カスタム例外クラスの定義
+  - [x] `module/exceptions.py` を新規作成
+  - [x] `ConfigError`, `ModelLoadError`, `MergeError`, `ExtensionError` 等
+- [x] 裸の `except` / `except Exception` の置き換え
+  - [x] `presets.py` L27: `except:` → 適切なエラーハンドリング
+  - [x] `generation.py` L55: `except Exception` → `except OSError`
+  - [x] `extension_manager.py` のフック実行部: 例外時のフォールバック戦略を明確化
 - [ ] ユーザー向けエラーメッセージの改善
   - [ ] 技術的なスタックトレースではなく、対処法を含むメッセージ
 
@@ -297,14 +298,14 @@
 
 #### 7.3 ロギング・ドキュメンテーション
 
-- [ ] ロギングの構造化（JSON ログ出力オプション）
-  - [ ] `python-json-logger` or `structlog` の導入
+- [x] ロギングの構造化（JSON ログ出力オプション）
+  - [x] `python-json-logger` or `structlog` の導入 (カスタムロガー `logging_config.py` に集約)
   - [ ] ログレベルの細分化（現在は INFO/ERROR のみが大半）
   - [ ] ファイルログとコンソールログの分離
 - [ ] ドキュメント整備
   - [ ] API リファレンス（`module/` 配下の全 public 関数）
   - [ ] 拡張機能開発ガイド（`extensions/sample_extension/` を参考にしたテンプレート）
-  - [ ] YAML 設定ファイルのスキーマ定義（JSON Schema or Pydantic モデル）
+  - [x] YAML 設定ファイルのスキーマ定義（JSON Schema or Pydantic モデル）
 
 > **[考察]** 現在 `main.py`, `ui/app.py` ともに `logging.basicConfig()` を個別に呼んでおり、
 > ロガー設定が散在している。ルートロガーの設定を `module/logging_config.py` に統一すべき。
@@ -312,13 +313,13 @@
 
 #### 7.4 型安全性と YAML 設定のバリデーション
 
-- [ ] Pydantic モデルによる設定バリデーション
-  - [ ] `module/config_schema.py` を新規作成
-  - [ ] `MergeConfig`, `ModelConfig`, `GenerationConfig` 等のデータクラス定義
-  - [ ] YAML 読み込み時に自動バリデーション
-  - [ ] 無効な設定時の明確なエラーメッセージ
-- [ ] 型注釈の補完
-  - [ ] `history.py`, `presets.py` 等の型注釈が欠如しているモジュール
+- [x] Pydantic モデルによる設定バリデーション
+  - [x] `module/config_schema.py` を新規作成
+  - [x] `MergeConfig`, `ModelConfig`, `GenerationConfig` 等のデータクラス定義
+  - [x] YAML 読み込み時に自動バリデーション
+  - [x] 無効な設定時の明確なエラーメッセージ
+- [x] 型注釈の補完
+  - [x] `history.py`, `presets.py` 等の型注釈が欠如しているモジュール
   - [ ] `mypy --strict` でのチェック
 
 > **[考察・新規追加]** `main.py` の `config` は生の `dict`。`models` リスト内の各要素は
@@ -425,11 +426,11 @@
 
 | カテゴリ | 該当ファイル | 内容 |
 |---------|------------|------|
-| 裸の `except` | `presets.py` L27 | `except:` で例外を握りつぶし |
+| 裸の `except` | `presets.py` 等 | (解決済) 適切なエラーハンドリングに置き換えました |
 | コード重複 | `mbw_each.py`, `multi_merge.py`, `lora_ops.py` | YAML 生成 → `main()` 呼出パターンが 3 箇所で重複 |
 | ハードコードパス | `presets.py`, `history.py`, `multi_merge.py` | `os.path.join(dirname, "..", "..")` の連鎖 |
 | SDXL 未対応 | `analysis.py` | `categorize_key()` が SD1.5 構造のみ前提 |
-| テスト不在 | 全モジュール | ユニットテスト 0 件 |
-| 型注釈不足 | `history.py`, `presets.py` | 入出力の型が不明瞭 |
+| テスト不在 | 全モジュール | (一部緩和) 設定スキーマの単体テストを導入 |
+| 型注釈不足 | `history.py`, `presets.py` | (解決済) `history.py`, `presets.py` 等に型を追加 |
 | メモリ管理 | `generation.py` | 毎回フルロード、キャッシュなし |
-| ロガー設定散在 | `main.py`, `ui/app.py`, `preprocess_method.py` | `basicConfig()` が複数箇所で呼ばれている |
+| ロガー設定散在 | `main.py`, `ui/app.py`等 | (解決済) `logging_config.py` に統一 |

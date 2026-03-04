@@ -7,7 +7,11 @@ import argparse
 import torch
 import sd_mecha
 from rich.console import Console
-from rich.logging import RichHandler
+
+from module.logging_config import logger
+from module.exceptions import ConfigError, SDMergerError
+from module.config_schema import MergeConfig
+from pydantic import ValidationError
 
 from module.calc_method import get_calculation_strategy
 from module.calc_target import (
@@ -22,12 +26,7 @@ from module.extension_manager import (
     run_post_merge_hooks,
 )
 
-# ロギングの設定
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[RichHandler()],
-)
+# logger configuration is handled by module.logging_config
 
 console = Console()
 
@@ -47,8 +46,15 @@ def main(config_path: str, output_dir: str) -> None:
         output_dir: 出力ディレクトリのパス。
     """
     # 設定を読み込み、拡張機能による事前加工（MBWの解決など）を行う
-    config = load_yaml_config(config_path)
-    config = run_pre_config_hooks(config)
+    raw_config = load_yaml_config(config_path)
+    try:
+        validated_config = MergeConfig(**raw_config)
+        # We process extensions based on raw config for now, then can re-validate or just use dict as before.
+        # But let's work with the validated dict
+        config = run_pre_config_hooks(validated_config.model_dump())
+    except ValidationError as e:
+        logger.error(f"コンフィグのバリデーションエラー: {e}")
+        raise ConfigError("Invalid configuration syntax or types.", original_error=e)
 
     target_model_path = config.get("target_model")
     if target_model_path:
@@ -58,25 +64,18 @@ def main(config_path: str, output_dir: str) -> None:
 
     models = config.get("models", [])
     if not models:
-        logging.error("設定ファイルにモデルが指定されていません。")
+        logger.error("設定ファイルにモデルが指定されていません。")
         return
 
     # SDXL キーの自動変換などの機能は sd-mecha がモデルコンフィグを自動推論して適用するため
     # 以前のような use_sdxl_keys フラグの手動管理は基本不要になります。
 
     for model_config in models:
-        # 必須フィールドのバリデーション
-        required_fields = ["left", "right", "velocity", "strategy"]
-        missing = [f for f in required_fields if f not in model_config]
-        if missing:
-            logging.error(f"モデル設定に必須フィールドが不足しています: {missing}")
-            sys.exit(1)
-
         left_node = sd_mecha.model(model_config["left"])
         right_node = sd_mecha.model(model_config["right"])
-        target_velocity = model_config["velocity"]
+        target_velocity = model_config.get("velocity", 1.0)
         left_right_velocity = model_config.get("left_right_velocity", 1.0)
-        strategy_name = model_config["strategy"]
+        strategy_name = model_config.get("strategy", "addition")
         key_patterns = model_config.get("key_patterns", None)
         replace_with = model_config.get("replace_with", None)
         target_strategy_name = model_config.get("target_strategy", "addition")
@@ -84,12 +83,12 @@ def main(config_path: str, output_dir: str) -> None:
 
         if not key_patterns:
             if recipe is None:
-                logging.error("target_model と key_patterns の両方が未指定です。どちらかを指定してください。")
-                sys.exit(1)
+                logger.error("target_model と key_patterns の両方が未指定です。どちらかを指定してください。")
+                raise ConfigError("target_model と key_patterns の両方が未指定です。")
             # 現在は sd-mecha が全キーを走査するため、必要であれば事前検出などは別に行う必要があります。
             # プロジェクトの互換性維持のためここは一度エラーにします。
-            logging.error('key_patterns の指定は必須です。(全キーを指定する場合は "." 等を指定)')
-            sys.exit(1)
+            logger.error('key_patterns の指定は必須です。(全キーを指定する場合は "." 等を指定)')
+            raise ConfigError("key_patterns の指定は必須です。")
 
         calc_func = get_calculation_strategy(strategy_name, replace_with)
         target_func = get_target_calculation_strategy(target_strategy_name)
@@ -155,15 +154,21 @@ def main(config_path: str, output_dir: str) -> None:
     output_path = os.path.join(output_dir, output_filename)
     os.makedirs(output_dir, exist_ok=True)
 
-    # pre_merge_hookの実行（カスタムレシピ変更用）
     recipe = run_pre_merge_hooks(config, recipe)
 
-    logging.info(f"マージ処理を実行し、{output_path} に保存します...")
-    logging.info("sd-mecha がストリーミング処理を開始します。")
+    logger.info(f"マージ処理を実行し、{output_path} に保存します...")
+    logger.info("sd-mecha がストリーミング処理を開始します。")
     # sd-mecha によるストリーミングマージの実行
     sd_mecha.set_log_level(logging.INFO)
-    sd_mecha.merge(recipe, output=output_path)
-    logging.info("マージが完了しました。")
+    try:
+        sd_mecha.merge(recipe, output=output_path)
+    except Exception as e:
+        logger.error(f"sd-mecha merging error: {e}")
+        from module.exceptions import MergeError
+
+        raise MergeError("Merge failed during sd_mecha processing", original_error=e)
+
+    logger.info("マージが完了しました。")
 
     # post_merge_hookの実行
     run_post_merge_hooks(config, output_path)
@@ -177,10 +182,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
         sd_mecha.set_log_level(logging.DEBUG)
 
     # 拡張機能の読み込み
     load_extensions()
 
-    main(args.config, args.output)
+    try:
+        main(args.config, args.output)
+    except SDMergerError as e:
+        logger.error(f"Application Error: {e}")
+        sys.exit(1)
+    except Exception:
+        logger.exception("Unexpected error occurred.")
+        sys.exit(1)

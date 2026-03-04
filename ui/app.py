@@ -1,7 +1,6 @@
 import os
 import sys
 import gradio as gr
-import logging
 
 # Ensure the project root is in sys.path so 'ui' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -267,6 +266,5 @@ document.addEventListener('keydown', function(e) {
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     app = create_ui()
     app.launch()

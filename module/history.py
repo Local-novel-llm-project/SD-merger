@@ -2,11 +2,12 @@ import os
 import json
 import time
 import yaml
+from typing import List, Dict, Any
 
 HISTORY_FILE = os.path.join(os.path.dirname(__file__), "..", "merge_history.json")
 
 
-def load_history():
+def load_history() -> List[Dict[str, Any]]:
     if not os.path.exists(HISTORY_FILE):
         return []
     try:
@@ -16,7 +17,7 @@ def load_history():
         return []
 
 
-def save_history(entry):
+def save_history(entry: Dict[str, Any]) -> None:
     history = load_history()
     entry["timestamp"] = time.time()
     entry["date"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry["timestamp"]))
@@ -28,7 +29,7 @@ def save_history(entry):
         json.dump(history, f, indent=2, ensure_ascii=False)
 
 
-def update_history_entry(output_name: str, update_dict: dict):
+def update_history_entry(output_name: str, update_dict: Dict[str, Any]) -> bool:
     """特定の output_name を持つ最新のヒストリエントリを更新する"""
     history = load_history()
     updated = False
