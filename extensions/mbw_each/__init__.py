@@ -17,9 +17,7 @@ def strategy_mbw_each(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
     velocity: Parameter(Tensor) = 1.0,
-    key_patterns_json: Parameter(
-        str
-    ) = "{}",  # {"IN00": {"pattern": "...", "a": 0.5, "b": 0.3}, ...}
+    key_patterns_json: Parameter(str) = "{}",  # {"IN00": {"pattern": "...", "a": 0.5, "b": 0.3}, ...}
     **kwargs,
 ) -> Return(Tensor):
     """
@@ -69,23 +67,16 @@ def mbw_each_pre_config_hook(config: dict) -> dict:
 
     models = config.get("models", [])
     for model_entry in models:
-        if model_entry.get("strategy") == "mbw_each":
-            mbw_a_str = model_entry.get("mbw_a", "")
-            mbw_b_str = model_entry.get("mbw_b", "")
+        mbw_a_str = model_entry.get("mbw_a", "")
+        mbw_b_str = model_entry.get("mbw_b", "")
 
-            if not mbw_a_str or not mbw_b_str:
-                logging.warning(
-                    "strategy が mbw_each ですが、mbw_a または mbw_b が指定されていません。"
-                )
-                continue
-
+        # mbw_a / mbw_b の指定がある場合のみ、ブロックごとの重み(key_patterns)を生成する
+        if mbw_a_str and mbw_b_str:
             try:
                 ratios_a = [float(r.strip()) for r in mbw_a_str.split(",")]
                 ratios_b = [float(r.strip()) for r in mbw_b_str.split(",")]
             except ValueError:
-                logging.error(
-                    "MBW Each パースエラー。数値とカンマのみを使用してください。"
-                )
+                logging.error("MBW Each パースエラー。数値とカンマのみを使用してください。")
                 continue
 
             if len(ratios_a) != len(ratios_b):
@@ -97,20 +88,14 @@ def mbw_each_pre_config_hook(config: dict) -> dict:
             elif len(ratios_a) == 20:
                 keywords = _SDXL_KEYWORDS
             else:
-                logging.error(
-                    f"MBW Each: ブロック数が 26 または 20 ではありません (現在: {len(ratios_a)})"
-                )
+                logging.error(f"MBW Each: ブロック数が 26 または 20 ではありません (現在: {len(ratios_a)})")
                 continue
 
             rules = {}
-            for i, (ratio_a, ratio_b, pattern) in enumerate(
-                zip(ratios_a, ratios_b, keywords)
-            ):
+            for i, (ratio_a, ratio_b, pattern) in enumerate(zip(ratios_a, ratios_b, keywords)):
                 rules[f"block_{i}"] = {"pattern": pattern, "a": ratio_a, "b": ratio_b}
 
-            model_entry["key_patterns"] = (
-                rules  # mbw_each戦略側でJSONデコードして使用する
-            )
+            model_entry["key_patterns"] = rules  # mbw_each戦略側でJSONデコードして使用する
 
             # クリーンアップ
             model_entry.pop("mbw_a", None)

@@ -82,13 +82,44 @@ def render_mbw_each_tab():
     )
 
     with gr.Row():
-        model_list = get_model_list()
-        model_a = gr.Dropdown(label="Model A (Left)", choices=model_list)
-        model_b = gr.Dropdown(label="Model B (Right)", choices=model_list)
-        model_c = gr.Dropdown(
-            label="Model C (Base/Target, optional)",
-            choices=model_list,
-        )
+        with gr.Column(scale=1):
+            model_list = get_model_list()
+            model_a = gr.Dropdown(label="Model A (Left)", choices=model_list)
+            model_b = gr.Dropdown(label="Model B (Right)", choices=model_list)
+            model_c = gr.Dropdown(
+                label="Model C (Base/Target, optional)",
+                choices=model_list,
+            )
+        with gr.Column(scale=1):
+            strategy = gr.Dropdown(
+                label="Merge Strategy (Left/Right)",
+                choices=[
+                    "addition",
+                    "subtraction",
+                    "multiplication",
+                    "mix",
+                    "cosineA",
+                    "cosineB",
+                    "smoothAdd",
+                    "tensor",
+                    "tensor2",
+                    "mbw_each",
+                    "quantum",
+                ],
+                value="mbw_each",
+            )
+            target_strategy = gr.Dropdown(
+                label="Target Strategy (apply to Model C)",
+                choices=[
+                    "mix",
+                    "addition",
+                    "subtraction",
+                    "angle",
+                    "trainDifference",
+                    "extract",
+                ],
+                value="mix",
+            )
 
     # --- Pincushion Merge (Auto Curve Generator) UI ---
     with gr.Accordion("Pincushion Merge (Auto Curve Generator)", open=False):
@@ -181,7 +212,7 @@ def render_mbw_each_tab():
     merge_btn = gr.Button("Run MBW Each Merge", variant="primary")
     output_log = gr.Textbox(label="Output Log", lines=3)
 
-    def run_mbw_each_merge(a, b, c, mbw_a_val, mbw_b_val, use_adv, out):
+    def run_mbw_each_merge(a, b, c, strat, t_strat, mbw_a_val, mbw_b_val, use_adv, out):
         if not a or not b:
             return "Error: Model A and Model B are required."
 
@@ -202,7 +233,8 @@ def render_mbw_each_tab():
                     {
                         "left": get_model_path(a),
                         "right": get_model_path(b),
-                        "strategy": "mbw_each",
+                        "strategy": strat,
+                        "target_strategy": t_strat,
                         "mbw_a": mbw_a_val,
                         "mbw_b": mbw_b_val,
                     }
@@ -222,6 +254,6 @@ def render_mbw_each_tab():
 
     merge_btn.click(
         run_mbw_each_merge,
-        inputs=[model_a, model_b, model_c, mbw_a, mbw_b, use_advanced_options, output_name],
+        inputs=[model_a, model_b, model_c, strategy, target_strategy, mbw_a, mbw_b, use_advanced_options, output_name],
         outputs=[output_log],
     )

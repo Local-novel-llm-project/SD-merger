@@ -24,6 +24,18 @@ def render_lora_ops_tab():
                     dim = gr.Number(label="Network Dim (Rank)", value=128, precision=0)
                     conv_dim = gr.Number(label="Conv Dim", value=0, precision=0)
                     alpha = gr.Number(label="Alpha", value=1.0)
+                    t_strategy = gr.Dropdown(
+                        label="Target Strategy",
+                        choices=[
+                            "mix",
+                            "addition",
+                            "subtraction",
+                            "angle",
+                            "trainDifference",
+                            "extract",
+                        ],
+                        value="extract",
+                    )
                     device = gr.Dropdown(label="Device", choices=["cpu", "cuda"], value="cpu")
                     save_precision = gr.Dropdown(
                         label="Save Precision",
@@ -38,7 +50,7 @@ def render_lora_ops_tab():
             extract_btn = gr.Button("Extract LoRA", variant="primary")
             extract_log = gr.Textbox(label="Extraction Log")
 
-            def run_extract(base, tuned, out, d, cd, a, dev, prec, sdxl, v2):
+            def run_extract(base, tuned, out, d, cd, a, t_strat, dev, prec, sdxl, v2):
                 if not base or not tuned:
                     return "Base Model and Tuned Model are required."
 
@@ -60,6 +72,7 @@ def render_lora_ops_tab():
                                 "dim": int(d),
                                 "conv_dim": int(cd) if cd > 0 else None,
                                 "alpha": float(a),
+                                "target_strategy": t_strat,
                                 "device": dev,
                                 "save_precision": prec,
                                 "sdxl": sdxl,
@@ -79,6 +92,7 @@ def render_lora_ops_tab():
                     dim,
                     conv_dim,
                     alpha,
+                    t_strategy,
                     device,
                     save_precision,
                     is_sdxl_ext,
@@ -100,6 +114,23 @@ def render_lora_ops_tab():
                         label="Ratios (comma separated)",
                         value="1.0, 1.0",
                         placeholder="1.0, 0.5",
+                    )
+                    strategy = gr.Dropdown(
+                        label="Merge Strategy",
+                        choices=[
+                            "addition",
+                            "subtraction",
+                            "multiplication",
+                            "mix",
+                            "cosineA",
+                            "cosineB",
+                            "smoothAdd",
+                            "tensor",
+                            "tensor2",
+                            "mbw_each",
+                            "quantum",
+                        ],
+                        value="addition",
                     )
                     merge_output = gr.Textbox(label="Output Filename", value="merged_lora.safetensors")
 
@@ -124,7 +155,7 @@ def render_lora_ops_tab():
             merge_btn = gr.Button("Merge LoRAs", variant="primary")
             merge_log = gr.Textbox(label="Merge Log")
 
-            def run_merge(mods, rats, out, prec, s_prec, conc, shuf, sdxl, v2):
+            def run_merge(mods, rats, strat, out, prec, s_prec, conc, shuf, sdxl, v2):
                 if not mods or len(mods) < 1:
                     return "At least one LoRA model is required."
 
@@ -150,6 +181,7 @@ def render_lora_ops_tab():
                                 "type": "merge",
                                 "models": model_paths,
                                 "ratios": ratio_list,
+                                "strategy": strat,
                                 "output": (
                                     os.path.abspath(
                                         os.path.join(os.path.dirname(__file__), "..", "..", "models", "output", out)
@@ -174,6 +206,7 @@ def render_lora_ops_tab():
                 inputs=[
                     models,
                     ratios,
+                    strategy,
                     merge_output,
                     precision,
                     m_save_precision,

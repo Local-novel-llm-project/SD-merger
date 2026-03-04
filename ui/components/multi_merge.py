@@ -29,6 +29,10 @@ def parse_multi_merge_command(cmd_text: str):
 
             if key == "O":
                 op_dict["output_name"] = val
+            elif key in ("S", "Strategy"):
+                op_dict["strategy"] = val
+            elif key in ("TS", "Target_Strategy"):
+                op_dict["target_strategy"] = val
             elif key == "Model_A":
                 op_dict["left"] = val
             elif key == "Model_B":
@@ -50,10 +54,12 @@ def parse_multi_merge_command(cmd_text: str):
                 mbw_b[14 + idx] = float(val)
             elif key == "base_alpha":
                 op_dict["velocity"] = float(val)
-                op_dict["strategy"] = "mix"  # ブロック指定がない全体アルファとみなす
+                # S= が明示的に指定されていない場合のみ "mix" にフォールバックする
+                if "strategy" not in op_dict or op_dict["strategy"] == "mbw_each":
+                    op_dict["strategy"] = "mix"
 
         # もし MBW の上書きがあったら文字列化して追加
-        if op_dict["strategy"] == "mbw_each":
+        if op_dict.get("strategy", "mbw_each") == "mbw_each":
             op_dict["mbw_a"] = ",".join(map(str, mbw_a))
             op_dict["mbw_b"] = ",".join(map(str, mbw_b))
 
@@ -69,13 +75,13 @@ def render_multi_merge_tab():
         "1行に1つのマージ処理を記述し、複数のパラメータでの一括マージを行います。変数同士はカンマ(`,`)で区切ります。"
     )
     gr.Markdown(
-        "**利用可能な変数:** `O` (出力ファイル名), `Model_A`, `Model_B`, `IN_A_00` ~ `IN_A_11`, `OUT_A_00` ~ `OUT_A_11`, `M_00` 等"
+        "**利用可能な変数:** `O` (出力ファイル名), `Model_A`, `Model_B`, `S` または `Strategy` (マージ戦略), `TS` または `Target_Strategy` (ターゲット処理), `IN_A_00` ~ `IN_A_11`, `OUT_A_00` ~ `OUT_A_11`, `M_00` 等"
     )
 
     cmd_text = gr.Textbox(
         label="Commands",
         lines=10,
-        placeholder="O=out1.safetensors, IN_A_00=0.75, Model_A=model_a.safetensors, Model_B=model_b.safetensors\nO=out2.safetensors, OUT_B_11=0.8, Model_A=model_a.safetensors, Model_B=model_b.safetensors",
+        placeholder="O=out1.safetensors, S=cosineA, Model_A=model_a.safetensors, Model_B=model_b.safetensors\nO=out2.safetensors, OUT_B_11=0.8, Model_A=model_a.safetensors, Model_B=model_b.safetensors",
     )
 
     run_btn = gr.Button("Run Batch Merge", variant="primary")

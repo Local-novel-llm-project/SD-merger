@@ -21,6 +21,7 @@ from ui.components.ab_test import render_ab_test_tab
 from ui.utils import get_model_list, get_model_path
 
 from ui.components.queue_ui import render_queue_tab
+from ui.components.bayesian_merger import create_bayesian_merger_ui
 from module.queue_manager import queue_manager
 
 
@@ -164,8 +165,12 @@ def create_ui():
                 render_multi_merge_tab()
 
             # タブ 5: Generate & Test
+            from ui.components.generation import render_auto_generate_settings
+
             with gr.TabItem("Generate & Test"):
                 render_generation_tab()
+                gr.Markdown("---")
+                render_auto_generate_settings()
 
             # タブ 6: Analysis
             with gr.TabItem("Analysis"):
@@ -202,6 +207,10 @@ def create_ui():
             # タブ 13: Queue Manager
             with gr.TabItem("Tasks Queue"):
                 render_queue_tab()
+
+            # タブ 14: Bayesian Merger
+            with gr.TabItem("Bayesian Merger"):
+                create_bayesian_merger_ui()
 
     return app
 

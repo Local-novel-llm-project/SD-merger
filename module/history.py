@@ -28,6 +28,24 @@ def save_history(entry):
         json.dump(history, f, indent=2, ensure_ascii=False)
 
 
+def update_history_entry(output_name: str, update_dict: dict):
+    """特定の output_name を持つ最新のヒストリエントリを更新する"""
+    history = load_history()
+    updated = False
+
+    for entry in history:
+        if entry.get("output_name") == output_name:
+            entry.update(update_dict)
+            updated = True
+            break
+
+    if updated:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
+
+    return updated
+
+
 def history_to_yaml(entry: dict) -> str:
     """ヒストリエントリからYAML設定を再生成する"""
     config = entry.get("config", {})
