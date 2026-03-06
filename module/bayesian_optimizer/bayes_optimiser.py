@@ -1,6 +1,6 @@
 import logging
 
-from bayes_opt import BayesianOptimization, Events
+from bayes_opt import BayesianOptimization
 from scipy.stats import qmc
 
 from module.bayesian_optimizer.optimiser import Optimiser
@@ -22,11 +22,8 @@ class BayesOptimiser(Optimiser):
             # allow_duplicate_points=True
         )
 
-        # ログ登録
-        from bayes_opt.logger import JSONLogger
-
-        logger = JSONLogger(path=str(self.output_dir / f"{self.log_name}_bayes.json"))
-        self.optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
+        # ログファイルパス保存
+        self.log_file = self.output_dir / f"{self.log_name}_bayes.json"
 
         init_points = self.cfg.get("init_points", 5)
 
@@ -55,6 +52,9 @@ class BayesOptimiser(Optimiser):
 
     def postprocess(self) -> None:
         logging.info("\n--- Optimization Finished ---")
+
+        if hasattr(self, "optimizer") and hasattr(self, "log_file"):
+            self.optimizer.save_state(str(self.log_file))
 
         if not hasattr(self, "optimizer") or not self.optimizer.res:
             logging.warning("No results to process.")

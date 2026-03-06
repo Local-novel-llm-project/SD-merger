@@ -35,26 +35,6 @@ def create_ui():
 
     with gr.Blocks(
         title="SD-merger UI",
-        theme=gr.themes.Soft(),
-        head="""
-<style>
-/* Optional custom CSS overrides for better appearance */
-.gradio-container { max-width: 1400px !important; }
-</style>
-<script>
-// Keyboard shortcut handling
-document.addEventListener('keydown', function(e) {
-    // Ctrl+Enter or Cmd+Enter to trigger the primary button on active tab
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        const primaryBtn = document.querySelector('.tabitem[style*="block"] button.primary');
-        if (primaryBtn) {
-            primaryBtn.click();
-            e.preventDefault();
-        }
-    }
-});
-</script>
-""",
     ) as app:
         gr.Markdown("# SD-merger")
         with gr.Row():
@@ -86,14 +66,14 @@ document.addEventListener('keydown', function(e) {
                         model_list = get_model_list()
                         model_a = gr.Dropdown(label="Model A (Left)", choices=model_list)
                         model_b = gr.Dropdown(label="Model B (Right)", choices=model_list)
-                        model_c = gr.Dropdown(label="Model C (Base/Target, optional)", choices=model_list)
+                        model_c = gr.Dropdown(label="Model C (Base/Target, optional)", choices=["選択しない"] + model_list, value="選択しない")
 
                         def refresh_dropdowns():
                             updated_list = get_model_list()
                             return [
                                 gr.update(choices=updated_list),
                                 gr.update(choices=updated_list),
-                                gr.update(choices=updated_list),
+                                gr.update(choices=["選択しない"] + updated_list),
                             ]
 
                         refresh_model_btn.click(refresh_dropdowns, inputs=[], outputs=[model_a, model_b, model_c])
@@ -153,7 +133,10 @@ document.addEventListener('keydown', function(e) {
                     if not a or not b:
                         return "Model A and Model B are required."
 
-                    target_model_path = get_model_path(c) if c else get_model_path(a)
+                    if c == "選択しない":
+                        target_model_path = ""
+                    else:
+                        target_model_path = get_model_path(c) if c else get_model_path(a)
                     left_model_path = get_model_path(a)
                     right_model_path = get_model_path(b)
 
@@ -267,4 +250,25 @@ document.addEventListener('keydown', function(e) {
 
 if __name__ == "__main__":
     app = create_ui()
-    app.launch()
+    
+    # launch arguments for network exposure and UI styles
+    head_content = """
+<style>
+/* Optional custom CSS overrides for better appearance */
+.gradio-container { max-width: 1400px !important; }
+</style>
+<script>
+// Keyboard shortcut handling
+document.addEventListener('keydown', function(e) {
+    // Ctrl+Enter or Cmd+Enter to trigger the primary button on active tab
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const primaryBtn = document.querySelector('.tabitem[style*="block"] button.primary');
+        if (primaryBtn) {
+            primaryBtn.click();
+            e.preventDefault();
+        }
+    }
+});
+</script>
+"""
+    app.launch(server_name="0.0.0.0", server_port=7860, share=False, theme=gr.themes.Soft(), head=head_content)

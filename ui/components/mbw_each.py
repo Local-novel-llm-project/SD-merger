@@ -154,7 +154,7 @@ def render_mbw_each_tab():
 
         with gr.Row():
             plot_output = gr.LinePlot(
-                x="Index", y="Alpha", tooltip=["Block", "Alpha"], title="Alpha Weight Curve", width=800, height=300
+                x="Index", y="Alpha", tooltip=["Block", "Alpha"], title="Alpha Weight Curve"
             )
 
         with gr.Row():

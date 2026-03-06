@@ -30,3 +30,7 @@ pydantic~=2.0
 pydantic-settings~=2.0
 einops>=0.8.2
 psutil
+bayesian-optimization
+hyperopt
+optuna
+setuptools<70

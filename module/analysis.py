@@ -32,10 +32,13 @@ def categorize_key(key):
         return "COND_XL"
 
     # SDXL specific down/up blocks if not matched above
-    if re.search(r"down_blocks\.(\d+)", key):
-        return f"IN_XL{int(re.search(r'down_blocks\.(\d+)', key).group(1)):02d}"
-    if re.search(r"up_blocks\.(\d+)", key):
-        return f"OUT_XL{int(re.search(r'up_blocks\.(\d+)', key).group(1)):02d}"
+    match_down_xl = re.search(r"down_blocks\.(\d+)", key)
+    if match_down_xl:
+        return f"IN_XL{int(match_down_xl.group(1)):02d}"
+    
+    match_up_xl = re.search(r"up_blocks\.(\d+)", key)
+    if match_up_xl:
+        return f"OUT_XL{int(match_up_xl.group(1)):02d}"
 
     return "OTHER"
 

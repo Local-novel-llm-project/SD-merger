@@ -38,19 +38,12 @@ def scale_tensor(
     return a * scale
 
 
-def main(config_path: str, output_dir: str) -> None:
-    """メイン処理。設定ファイルに従いモデルのマージを sd-mecha レシピとして構築して実行する。
-
-    Args:
-        config_path: YAML 設定ファイルのパス。
-        output_dir: 出力ディレクトリのパス。
+def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -> str | None:
+    """設定辞書を受け取り、マージ処理を実行する。
+    戻り値: マージされたモデルのファイルパス。save_model が False の場合は一時ファイルのパス。
     """
-    # 設定を読み込み、拡張機能による事前加工（MBWの解決など）を行う
-    raw_config = load_yaml_config(config_path)
     try:
         validated_config = MergeConfig(**raw_config)
-        # We process extensions based on raw config for now, then can re-validate or just use dict as before.
-        # But let's work with the validated dict
         config = run_pre_config_hooks(validated_config.model_dump())
     except ValidationError as e:
         logger.error(f"コンフィグのバリデーションエラー: {e}")
@@ -65,10 +58,7 @@ def main(config_path: str, output_dir: str) -> None:
     models = config.get("models", [])
     if not models:
         logger.error("設定ファイルにモデルが指定されていません。")
-        return
-
-    # SDXL キーの自動変換などの機能は sd-mecha がモデルコンフィグを自動推論して適用するため
-    # 以前のような use_sdxl_keys フラグの手動管理は基本不要になります。
+        return None
 
     for model_config in models:
         left_node = sd_mecha.model(model_config["left"])
@@ -85,8 +75,6 @@ def main(config_path: str, output_dir: str) -> None:
             if recipe is None:
                 logger.error("target_model と key_patterns の両方が未指定です。どちらかを指定してください。")
                 raise ConfigError("target_model と key_patterns の両方が未指定です。")
-            # 現在は sd-mecha が全キーを走査するため、必要であれば事前検出などは別に行う必要があります。
-            # プロジェクトの互換性維持のためここは一度エラーにします。
             logger.error('key_patterns の指定は必須です。(全キーを指定する場合は "." 等を指定)')
             raise ConfigError("key_patterns の指定は必須です。")
 
@@ -96,7 +84,6 @@ def main(config_path: str, output_dir: str) -> None:
 
         patterns_json = json.dumps(key_patterns)
 
-        # left/right の差分計算ノード
         diff_node = calc_func(
             left_node,
             right_node,
@@ -106,7 +93,6 @@ def main(config_path: str, output_dir: str) -> None:
 
         if recipe is not None:
             if target_strategy_name == "angle":
-                # angle は特殊で diff_l, diff_r を求める必要がある
                 diff_l = calc_func(
                     left_node,
                     recipe,
@@ -140,25 +126,27 @@ def main(config_path: str, output_dir: str) -> None:
 
             recipe = merged
         else:
-            # ターゲットモデルがない場合、left/right の計算結果をそのまま使用
             recipe = scale_tensor(diff_node, scale=target_velocity)
 
-    # 出力ファイル名の決定 (設定があればそれを優先)
-    output_filename = config.get("output_name")
-    if not output_filename:
-        # 全モデル設定から代表名を取得してファイル名を生成
-        first_left_name = os.path.basename(models[0]["left"])
-        last_right_name = os.path.basename(models[-1]["right"])
-        output_filename = generate_filename(first_left_name, last_right_name)
+    save_model = config.get("save_model", True)
 
-    output_path = os.path.join(output_dir, output_filename)
-    os.makedirs(output_dir, exist_ok=True)
+    if save_model:
+        output_filename = config.get("output_name")
+        if not output_filename:
+            first_left_name = os.path.basename(models[0]["left"])
+            last_right_name = os.path.basename(models[-1]["right"])
+            output_filename = generate_filename(first_left_name, last_right_name)
+        output_path = os.path.join(default_output_dir, output_filename)
+        os.makedirs(default_output_dir, exist_ok=True)
+    else:
+        import tempfile
+        fd, output_path = tempfile.mkstemp(suffix=".safetensors", prefix="sd_merge_tmp_")
+        os.close(fd)
 
     recipe = run_pre_merge_hooks(config, recipe)
 
     logger.info(f"マージ処理を実行し、{output_path} に保存します...")
     logger.info("sd-mecha がストリーミング処理を開始します。")
-    # sd-mecha によるストリーミングマージの実行
     sd_mecha.set_log_level(logging.INFO)
     try:
         sd_mecha.merge(recipe, output=output_path)
@@ -170,8 +158,21 @@ def main(config_path: str, output_dir: str) -> None:
 
     logger.info("マージが完了しました。")
 
-    # post_merge_hookの実行
-    run_post_merge_hooks(config, output_path)
+    if save_model:
+        run_post_merge_hooks(config, output_path)
+
+    return output_path
+
+
+def main(config_path: str, output_dir: str) -> None:
+    """メイン処理。設定ファイルに従いモデルのマージを sd-mecha レシピとして構築して実行する。
+
+    Args:
+        config_path: YAML 設定ファイルのパス。
+        output_dir: 出力ディレクトリのパス。
+    """
+    raw_config = load_yaml_config(config_path)
+    run_merge_pipeline(raw_config, default_output_dir=output_dir)
 
 
 if __name__ == "__main__":

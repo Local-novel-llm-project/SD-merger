@@ -12,7 +12,6 @@ from module.bayesian_optimizer.scorer import AestheticScorer
 # SD-mergerの内部モジュールのインポート（target functionで呼び出すため）
 from main import run_merge_pipeline
 from module.generation import generate_image
-from module.settings import Settings
 
 
 class Optimiser:
@@ -29,7 +28,7 @@ class Optimiser:
         self.iteration = 0
         self.best_rolling_score = 0.0
 
-        self.output_dir = Path(Settings.get("output_dir", "./output/bayesian"))
+        self.output_dir = Path(self.cfg.get("output_dir", "./output/bayesian"))
         os.makedirs(self.output_dir, exist_ok=True)
 
         self.log_name = f"optim_{int(time.time())}"
@@ -121,8 +120,14 @@ class Optimiser:
             logging.error(f"Generation error: {e}")
             return 0.0
 
-        # メモリから中間モデル削除
-        del merged_state
+        # 生成後は一時ファイルを削除
+        if merged_state and os.path.exists(merged_state):
+            try:
+                os.remove(merged_state)
+                logging.info(f"Deleted temp model file: {merged_state}")
+            except Exception as e:
+                logging.error(f"Failed to delete temp model file: {e}")
+
         import torch
 
         if torch.cuda.is_available():
