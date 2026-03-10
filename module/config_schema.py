@@ -1,51 +1,71 @@
-from typing import List, Optional, Union, Dict, Any
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Any, Dict, List, Optional
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 class ModelConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    # Required fields for merging
-    model_A: str = Field(
-        alias="model_a", default=""
-    )  # Alias logic handling can be complex, better to allow flexibility
-    model_B: str = Field(alias="model_b", default="")
-    model_C: str = Field(alias="model_c", default="")
-
-    # Generic model reference (some strategies just use "models": ["a", "b"])
-    # We will relax strict required fields if 'target_strategy' etc handles it
-
-    # Algorithm parameters
-    alpha: float = Field(default=0.5, ge=0.0, le=1.0)
+    left: str = Field(min_length=1, validation_alias=AliasChoices("left", "model_a"))
+    right: str = Field(min_length=1, validation_alias=AliasChoices("right", "model_b"))
+    base_model: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("base_model", "model_c"),
+    )
+    velocity: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        validation_alias=AliasChoices("velocity", "alpha"),
+    )
     beta: float = Field(default=0.5, ge=0.0, le=1.0)
-
-    # Strategy
     strategy: str = "addition"
     target_strategy: Optional[str] = None
-
-    # MBW specific
+    normalization_strategy: str = "none"
+    left_right_velocity: float = 1.0
+    replace_with: Optional[str] = None
+    key_patterns: Optional[List[str] | Dict[str, Any]] = None
     base_alpha: Optional[float] = None
     in_blocks: Optional[List[float]] = None
-    mid_block: Optional[List[float]] = None  # Sometimes a list of 1 element
+    mid_block: Optional[List[float]] = None
     out_blocks: Optional[List[float]] = None
     custom_weights: Optional[List[float]] = None
+    mbw: Optional[str] = None
+    mbw_a: Optional[str] = None
+    mbw_b: Optional[str] = None
 
     @field_validator("strategy", mode="before")
     def validate_strategy(cls, v):
-        # We can add a strict list of allowed strategies here later if needed
         return v
+
+    @property
+    def model_A(self) -> str:
+        return self.left
+
+    @property
+    def model_B(self) -> str:
+        return self.right
+
+    @property
+    def model_C(self) -> Optional[str]:
+        return self.base_model
+
+    @property
+    def alpha(self) -> float:
+        return self.velocity
 
 
 class MergeConfig(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    # Top level configuration
-    models: List[Union[ModelConfig, Dict[str, Any]]] = Field(default_factory=list)
+    models: List[ModelConfig] = Field(default_factory=list)
+    target_model: Optional[str] = None
     output_dir: str = "output"
+    output_name: Optional[str] = None
+    save_model: bool = True
     device: str = "cpu"
     dtype: str = "float16"
-
-    # Optional extensions/hooks configurations
+    bake_in_vae: Optional[str] = None
     extensions: Optional[Dict[str, Any]] = None
 
     @field_validator("dtype", mode="before")
@@ -66,5 +86,5 @@ class GenerationConfig(BaseModel):
     steps: int = Field(default=20, gt=0)
     cfg: float = Field(default=7.0, gt=0.0)
     seed: int = -1
-    sampler: str = "euler_a"
+    sampler: str = "euler_ancestral"
     batch_size: int = Field(default=1, gt=0)

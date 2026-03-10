@@ -26,7 +26,9 @@ class ATPEOptimiser(Optimiser):
         init_points = self.cfg.get("init_points", 5)
         n_iters = self.cfg.get("n_iters", 20)
 
-        logging.info(f"Starting ATPE Optimization (init: {init_points}, iters: {n_iters})...")
+        logging.info(
+            f"Starting ATPE Optimization (init: {init_points}, iters: {n_iters})..."
+        )
 
         fmin(
             self._target_function,
@@ -63,19 +65,10 @@ class ATPEOptimiser(Optimiser):
             logging.info("Saving best model...")
             from main import run_merge_pipeline
 
-            merge_config = {
-                "mode": "weight_sum",
-                "models": [
-                    {
-                        "left": self.cfg["model_a"],
-                        "right": self.cfg["model_b"],
-                        "strategy": "mbw_each",
-                        "base_alpha": base_alpha,
-                        "mbw": weights,
-                    }
-                ],
-                "save_model": True,
-                "output_name": self.cfg.get("output_name", "best_merged_model_atpe"),
-                "device": self.cfg.get("device", "cuda"),
-            }
+            merge_config = self.build_merge_config(
+                base_alpha,
+                weights,
+                save_model=True,
+                output_name=self.cfg.get("output_name", "best_merged_model_atpe"),
+            )
             run_merge_pipeline(merge_config)

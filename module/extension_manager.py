@@ -15,6 +15,7 @@ _EXTENSION_TARGET_STRATEGIES: Dict[str, Callable] = {}
 _HOOKS_PRE_CONFIG: List[Callable] = []
 _HOOKS_PRE_MERGE: List[Callable] = []
 _HOOKS_POST_MERGE: List[Callable] = []
+_LOADED_EXTENSION_MODULES: set[str] = set()
 
 
 def register_strategy(name: str, func: Callable):
@@ -35,17 +36,20 @@ def register_target_strategy(name: str, func: Callable):
 
 def register_pre_config_hook(func: Callable):
     """設定読み込み直後（YAMLパース直後）に実行されるフックを登録する。"""
-    _HOOKS_PRE_CONFIG.append(func)
+    if func not in _HOOKS_PRE_CONFIG:
+        _HOOKS_PRE_CONFIG.append(func)
 
 
 def register_pre_merge_hook(func: Callable):
     """マージ（レシピ結合）前に実行されるフックを登録する。"""
-    _HOOKS_PRE_MERGE.append(func)
+    if func not in _HOOKS_PRE_MERGE:
+        _HOOKS_PRE_MERGE.append(func)
 
 
 def register_post_merge_hook(func: Callable):
     """マージ実行後（ファイル出力後等）に実行されるフックを登録する。"""
-    _HOOKS_POST_MERGE.append(func)
+    if func not in _HOOKS_POST_MERGE:
+        _HOOKS_POST_MERGE.append(func)
 
 
 def get_extension_strategies() -> Dict[str, Callable]:
@@ -65,7 +69,9 @@ def run_pre_config_hooks(config: dict) -> dict:
             config = hook(config)
         except Exception as e:
             logger.error(f"pre_config フック実行中にエラーが発生しました: {e}")
-            raise ExtensionError(f"pre_config フック実行中のエラー: {e}", original_error=e)
+            raise ExtensionError(
+                f"pre_config フック実行中のエラー: {e}", original_error=e
+            )
     return config
 
 
@@ -78,7 +84,9 @@ def run_pre_merge_hooks(config: dict, recipe: Any) -> Any:
             recipe = hook(config, recipe)
         except Exception as e:
             logger.error(f"pre_merge フック実行中にエラーが発生しました: {e}")
-            raise ExtensionError(f"pre_merge フック実行中のエラー: {e}", original_error=e)
+            raise ExtensionError(
+                f"pre_merge フック実行中のエラー: {e}", original_error=e
+            )
     return recipe
 
 
@@ -89,7 +97,9 @@ def run_post_merge_hooks(config: dict, output_path: str):
             hook(config, output_path)
         except Exception as e:
             logger.error(f"post_merge フック実行中にエラーが発生しました: {e}")
-            raise ExtensionError(f"post_merge フック実行中のエラー: {e}", original_error=e)
+            raise ExtensionError(
+                f"post_merge フック実行中のエラー: {e}", original_error=e
+            )
 
 
 def load_extensions(extensions_dir: str = None):
@@ -103,7 +113,9 @@ def load_extensions(extensions_dir: str = None):
         extensions_dir = os.path.join(project_root, "extensions")
 
     if not os.path.exists(extensions_dir):
-        logger.info(f"拡張機能ディレクトリ '{extensions_dir}' が見つかりませんでした。作成します。")
+        logger.info(
+            f"拡張機能ディレクトリ '{extensions_dir}' が見つかりませんでした。作成します。"
+        )
         os.makedirs(extensions_dir, exist_ok=True)
         return
 
@@ -116,20 +128,31 @@ def load_extensions(extensions_dir: str = None):
     for item in os.listdir(extensions_dir):
         item_path = os.path.join(extensions_dir, item)
         # フォルダであり、__init__.py が存在する場合のみ拡張として扱う
-        if os.path.isdir(item_path) and os.path.exists(os.path.join(item_path, "__init__.py")):
+        if os.path.isdir(item_path) and os.path.exists(
+            os.path.join(item_path, "__init__.py")
+        ):
             try:
                 # 拡張機能モジュールをインポート
                 module = importlib.import_module(item)
 
                 # setup() 関数があれば実行
                 if hasattr(module, "setup"):
+                    if item in _LOADED_EXTENSION_MODULES:
+                        logger.info(f"拡張機能 '{item}' はすでに読み込み済みです。")
+                        loaded_extensions.append(item)
+                        continue
                     module.setup()
+                    _LOADED_EXTENSION_MODULES.add(item)
                     loaded_extensions.append(item)
                 else:
-                    logger.warning(f"拡張機能 '{item}' に setup() 関数が見つかりません。")
+                    logger.warning(
+                        f"拡張機能 '{item}' に setup() 関数が見つかりません。"
+                    )
 
             except Exception as e:
-                logger.error(f"拡張機能 '{item}' の読み込み中にエラーが発生しました: {e}")
+                logger.error(
+                    f"拡張機能 '{item}' の読み込み中にエラーが発生しました: {e}"
+                )
 
     if loaded_extensions:
         logger.info(f"読み込まれた拡張機能: {', '.join(loaded_extensions)}")

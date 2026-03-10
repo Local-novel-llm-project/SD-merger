@@ -10,7 +10,9 @@ from module.extension_manager import register_pre_config_hook
 logger = logging.getLogger(__name__)
 
 
-def get_decay_weight(step: int, total_steps: int, decay_type: str, initial_alpha: float = 1.0) -> float:
+def get_decay_weight(
+    step: int, total_steps: int, decay_type: str, initial_alpha: float = 1.0
+) -> float:
     """減衰カーブに従って現在のアルファ値を計算する"""
     if total_steps <= 1:
         return initial_alpha
@@ -43,7 +45,7 @@ def run_poison_pipeline(config: dict) -> dict:
 
     # 依存モジュールのインポート (循環参照を避けるため遅延インポート)
     from main import main as merger_main
-    from module.generation import generate_image
+    from module.generation import generate_first_image
     import tempfile
     import yaml
 
@@ -60,12 +62,15 @@ def run_poison_pipeline(config: dict) -> dict:
     os.makedirs(output_dir, exist_ok=True)
 
     current_base = base_model
+    last_output_path = None
 
     for step in range(iterations):
         alpha = get_decay_weight(step, iterations, decay_type, initial_alpha)
-        logger.info(f"--- Iteration {step + 1}/{iterations} (decay={decay_type}, alpha={alpha:.4f}) ---")
+        logger.info(
+            f"--- Iteration {step + 1}/{iterations} (decay={decay_type}, alpha={alpha:.4f}) ---"
+        )
 
-        step_output_name = f"poison_step_{step+1}.safetensors"
+        step_output_name = f"poison_step_{step + 1}.safetensors"
         step_output_path = os.path.join(output_dir, step_output_name)
 
         # 1. マージ用の一時 Config を作成し、merger_main を呼び出してマージ実行
@@ -87,18 +92,21 @@ def run_poison_pipeline(config: dict) -> dict:
             yaml.dump(step_config, f)
             tmp_cfg_path = f.name
 
-        logger.info(f"マージ実行中: {current_base} + {lora_model} (alpha={alpha:.4f}) -> {step_output_path}")
+        logger.info(
+            f"マージ実行中: {current_base} + {lora_model} (alpha={alpha:.4f}) -> {step_output_path}"
+        )
         merger_main(tmp_cfg_path, output_dir)
         os.remove(tmp_cfg_path)
 
         if not os.path.exists(step_output_path):
-            logger.error(f"マージの出力ファイルが見つかりません: {step_output_path}")
-            break
+            raise RuntimeError(
+                f"マージの出力ファイルが見つかりません: {step_output_path}"
+            )
 
         # 2. 画像の生成
         if prompt:
             logger.info("サンプル画像を生成中...")
-            img = generate_image(
+            img = generate_first_image(
                 model_path=step_output_path,
                 prompt=prompt,
                 negative_prompt=negative_prompt,
@@ -110,7 +118,7 @@ def run_poison_pipeline(config: dict) -> dict:
             )
 
             if img:
-                img_path = os.path.join(output_dir, f"poison_step_{step+1}.png")
+                img_path = os.path.join(output_dir, f"poison_step_{step + 1}.png")
                 img.save(img_path)
                 logger.info(f"画像を保存しました: {img_path}")
             else:
@@ -118,6 +126,7 @@ def run_poison_pipeline(config: dict) -> dict:
 
         # 3. 次のステップに向けて Base Model を更新
         current_base = step_output_path
+        last_output_path = step_output_path
 
         # メモリ解放
         gc.collect()
@@ -126,8 +135,8 @@ def run_poison_pipeline(config: dict) -> dict:
 
     logger.info("Poison Merge パイプラインが完了しました。")
 
-    # poison_merge 処理終了後、通常のモデルマージタスクを実行させないために models をクリア
-    config["models"] = []
+    config["_skip_merge"] = True
+    config["_skip_merge_output"] = last_output_path or current_base
 
     return config
 

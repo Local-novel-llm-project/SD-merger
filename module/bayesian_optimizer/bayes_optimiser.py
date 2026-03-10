@@ -43,7 +43,9 @@ class BayesOptimiser(Optimiser):
             init_points = 0  # LHSでプローブ済みのため
 
         n_iters = self.cfg.get("n_iters", 20)
-        logging.info(f"Starting Bayesian Optimization (init: {init_points}, iters: {n_iters})...")
+        logging.info(
+            f"Starting Bayesian Optimization (init: {init_points}, iters: {n_iters})..."
+        )
 
         self.optimizer.maximize(
             init_points=init_points,
@@ -81,19 +83,10 @@ class BayesOptimiser(Optimiser):
             logging.info("Saving best model...")
             from main import run_merge_pipeline
 
-            merge_config = {
-                "mode": "weight_sum",
-                "models": [
-                    {
-                        "left": self.cfg["model_a"],
-                        "right": self.cfg["model_b"],
-                        "strategy": "mbw_each",
-                        "base_alpha": base_alpha,
-                        "mbw": weights,
-                    }
-                ],
-                "save_model": True,
-                "output_name": self.cfg.get("output_name", "best_merged_model"),
-                "device": self.cfg.get("device", "cuda"),
-            }
+            merge_config = self.build_merge_config(
+                base_alpha,
+                weights,
+                save_model=True,
+                output_name=self.cfg.get("output_name", "best_merged_model"),
+            )
             run_merge_pipeline(merge_config)

@@ -9,8 +9,11 @@ PathT = os.PathLike
 
 
 def maxwhere(li: List[float]) -> Tuple[int, float]:
-    m = 0
-    mi = -1
+    if not li:
+        return -1, 0.0
+
+    m = li[0]
+    mi = 0
     for i, v in enumerate(li):
         if v > m:
             m = v
@@ -19,8 +22,11 @@ def maxwhere(li: List[float]) -> Tuple[int, float]:
 
 
 def minwhere(li: List[float]) -> Tuple[int, float]:
-    m = 10
-    mi = -1
+    if not li:
+        return -1, 0.0
+
+    m = li[0]
+    mi = 0
     for i, v in enumerate(li):
         if v < m:
             m = v

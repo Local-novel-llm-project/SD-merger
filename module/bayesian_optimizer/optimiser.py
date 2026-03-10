@@ -20,10 +20,14 @@ class Optimiser:
     """
 
     def __init__(self, cfg: Dict):
+        from module.extension_manager import load_extensions
+
+        load_extensions()
         self.cfg = cfg
         self.bounds_initialiser = Bounds()
         self.scorer = AestheticScorer(
-            method=self.cfg.get("scorer_method", "laion"), device=self.cfg.get("device", "cuda")
+            method=self.cfg.get("scorer_method", "laion"),
+            device=self.cfg.get("device", "cuda"),
         )
         self.iteration = 0
         self.best_rolling_score = 0.0
@@ -33,6 +37,38 @@ class Optimiser:
 
         self.log_name = f"optim_{int(time.time())}"
         self.best_log_path = self.output_dir / "best.log"
+
+    @staticmethod
+    def _format_mbw_values(values: List[float]) -> str:
+        return ",".join(f"{value:.6f}" for value in values)
+
+    def build_merge_config(
+        self,
+        base_alpha: float,
+        weights: List[float],
+        *,
+        save_model: bool,
+        output_name: str | None = None,
+    ) -> Dict:
+        blend_ratios = [base_alpha, *weights]
+        complementary_ratios = [1.0 - ratio for ratio in blend_ratios]
+
+        config = {
+            "models": [
+                {
+                    "left": self.cfg["model_a"],
+                    "right": self.cfg["model_b"],
+                    "strategy": "mbw_each",
+                    "mbw_a": self._format_mbw_values(complementary_ratios),
+                    "mbw_b": self._format_mbw_values(blend_ratios),
+                }
+            ],
+            "save_model": save_model,
+            "device": self.cfg.get("device", "cuda"),
+        }
+        if output_name:
+            config["output_name"] = output_name
+        return config
 
     def init_params(self) -> Dict:
         """探索空間を取得する"""
@@ -63,31 +99,14 @@ class Optimiser:
             groups=self.cfg.get("groups", []),
         )
 
-        # 2. マージ実行
-        # mbwの25値をモデル1, モデル2の重みとして適用
-        # SD-mergerの `strategy: mbw_each` を使用
-        merge_config = {
-            "mode": "weight_sum",
-            "models": [
-                {
-                    "left": self.cfg["model_a"],
-                    "right": self.cfg["model_b"],
-                    "strategy": "mbw_each",
-                    "base_alpha": base_alpha,
-                    "mbw": weights,
-                }
-            ],
-            # 最適化中は中間モデルをメモリ上に保持する（ファイル出力しない）
-            "save_model": False,
-            "device": self.cfg.get("device", "cuda"),
-        }
+        merge_config = self.build_merge_config(base_alpha, weights, save_model=False)
 
         logging.info(f"Merging models with base_alpha={base_alpha:.4f}")
 
-        # 内部API呼び出し（テンソル辞書を返す想定）
+        merged_model_path = None
         try:
-            merged_state = run_merge_pipeline(merge_config)
-            if not merged_state:
+            merged_model_path = run_merge_pipeline(merge_config)
+            if not merged_model_path:
                 logging.error("Merge output is empty.")
                 return 0.0
         except Exception as e:
@@ -97,36 +116,29 @@ class Optimiser:
         # 3. 画像生成
         images = []
         try:
-            # generate_image がメモリ上のテンソル辞書を受け取れるように拡張されている前提
             for prompt in self.cfg.get("prompts", [""]):
-                gen_result = generate_image(
-                    model_path_or_dict=merged_state,
+                generated_images = generate_image(
+                    model_path=merged_model_path,
                     prompt=prompt,
                     negative_prompt=self.cfg.get("negative_prompt", ""),
                     width=self.cfg.get("width", 512),
                     height=self.cfg.get("height", 512),
-                    num_inference_steps=self.cfg.get("steps", 20),
-                    guidance_scale=self.cfg.get("cfg_scale", 7.0),
+                    steps=self.cfg.get("steps", 20),
+                    cfg=self.cfg.get("cfg_scale", 7.0),
                     seed=self.cfg.get("seed", -1),
-                    device=self.cfg.get("device", "cuda"),
                 )
-                if gen_result.get("image"):
-                    images.append(gen_result["image"])
-
-                # VRAM開放
-                if "pipe" in gen_result:
-                    del gen_result["pipe"]
+                if generated_images:
+                    images.extend(generated_images)
         except Exception as e:
             logging.error(f"Generation error: {e}")
             return 0.0
-
-        # 生成後は一時ファイルを削除
-        if merged_state and os.path.exists(merged_state):
-            try:
-                os.remove(merged_state)
-                logging.info(f"Deleted temp model file: {merged_state}")
-            except Exception as e:
-                logging.error(f"Failed to delete temp model file: {e}")
+        finally:
+            if merged_model_path and os.path.exists(merged_model_path):
+                try:
+                    os.remove(merged_model_path)
+                    logging.info(f"Deleted temp model file: {merged_model_path}")
+                except Exception as e:
+                    logging.error(f"Failed to delete temp model file: {e}")
 
         import torch
 
@@ -162,8 +174,15 @@ class Optimiser:
     def postprocess(self) -> None:
         raise NotImplementedError("Not implemented")
 
-    def save_best_log(self, base_alpha: float, weights: List[float], score: float) -> None:
-        log_data = {"score": score, "base_alpha": base_alpha, "mbw": weights, "iteration": self.iteration}
+    def save_best_log(
+        self, base_alpha: float, weights: List[float], score: float
+    ) -> None:
+        log_data = {
+            "score": score,
+            "base_alpha": base_alpha,
+            "mbw": weights,
+            "iteration": self.iteration,
+        }
         with open(self.best_log_path, "w", encoding="utf-8") as f:
             json.dump(log_data, f, indent=4)
         logging.info(f"Saved best.log to {self.best_log_path}")

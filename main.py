@@ -38,7 +38,9 @@ def scale_tensor(
     return a * scale
 
 
-def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -> str | None:
+def run_merge_pipeline(
+    raw_config: dict, default_output_dir: str = "./merged"
+) -> str | None:
     """設定辞書を受け取り、マージ処理を実行する。
     戻り値: マージされたモデルのファイルパス。save_model が False の場合は一時ファイルのパス。
     """
@@ -48,6 +50,9 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
     except ValidationError as e:
         logger.error(f"コンフィグのバリデーションエラー: {e}")
         raise ConfigError("Invalid configuration syntax or types.", original_error=e)
+
+    if config.get("_skip_merge"):
+        return config.get("_skip_merge_output")
 
     target_model_path = config.get("target_model")
     if target_model_path:
@@ -73,9 +78,13 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
 
         if not key_patterns:
             if recipe is None:
-                logger.error("target_model と key_patterns の両方が未指定です。どちらかを指定してください。")
+                logger.error(
+                    "target_model と key_patterns の両方が未指定です。どちらかを指定してください。"
+                )
                 raise ConfigError("target_model と key_patterns の両方が未指定です。")
-            logger.error('key_patterns の指定は必須です。(全キーを指定する場合は "." 等を指定)')
+            logger.error(
+                'key_patterns の指定は必須です。(全キーを指定する場合は "." 等を指定)'
+            )
             raise ConfigError("key_patterns の指定は必須です。")
 
         calc_func = get_calculation_strategy(strategy_name, replace_with)
@@ -140,7 +149,10 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
         os.makedirs(default_output_dir, exist_ok=True)
     else:
         import tempfile
-        fd, output_path = tempfile.mkstemp(suffix=".safetensors", prefix="sd_merge_tmp_")
+
+        fd, output_path = tempfile.mkstemp(
+            suffix=".safetensors", prefix="sd_merge_tmp_"
+        )
         os.close(fd)
 
     recipe = run_pre_merge_hooks(config, recipe)
@@ -176,10 +188,18 @@ def main(config_path: str, output_dir: str) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="モデルの差分計算とマージツール (sd-mecha版)")
-    parser.add_argument("-c", "--config", type=str, default="sd_config.yaml", help="設定ファイルのパス")
-    parser.add_argument("-o", "--output", type=str, default="./merged", help="出力ディレクトリのパス")
-    parser.add_argument("-d", "--debug", action="store_true", help="DEBUGログレベルを有効にする")
+    parser = argparse.ArgumentParser(
+        description="モデルの差分計算とマージツール (sd-mecha版)"
+    )
+    parser.add_argument(
+        "-c", "--config", type=str, default="sd_config.yaml", help="設定ファイルのパス"
+    )
+    parser.add_argument(
+        "-o", "--output", type=str, default="./merged", help="出力ディレクトリのパス"
+    )
+    parser.add_argument(
+        "-d", "--debug", action="store_true", help="DEBUGログレベルを有効にする"
+    )
     args = parser.parse_args()
 
     if args.debug:

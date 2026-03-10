@@ -20,35 +20,54 @@ def render_xyz_plot_tab():
                 choices=["Velocity", "Strategy", "CFG Scale", "Steps", "Model Order"],
                 value="Velocity",
             )
-            x_values = gr.Textbox(label="X Values (comma separated)", value="0.25, 0.5, 0.75")
+            x_values = gr.Textbox(
+                label="X Values (comma separated)", value="0.25, 0.5, 0.75"
+            )
 
             y_type = gr.Dropdown(
                 label="Y Type",
-                choices=["Velocity", "Strategy", "CFG Scale", "Steps", "Model Order", "None"],
+                choices=[
+                    "Velocity",
+                    "Strategy",
+                    "CFG Scale",
+                    "Steps",
+                    "Model Order",
+                    "None",
+                ],
                 value="Strategy",
             )
-            y_values = gr.Textbox(label="Y Values (comma separated)", value="mix, addition")
+            y_values = gr.Textbox(
+                label="Y Values (comma separated)", value="mix, addition"
+            )
 
             z_type = gr.Dropdown(
                 label="Z Type",
-                choices=["Velocity", "Strategy", "CFG Scale", "Steps", "Model Order", "None"],
+                choices=[
+                    "Velocity",
+                    "Strategy",
+                    "CFG Scale",
+                    "Steps",
+                    "Model Order",
+                    "None",
+                ],
                 value="None",
             )
             z_values = gr.Textbox(label="Z Values (comma separated)", value="")
 
-            y_type = gr.Dropdown(
-                label="Y Type",
-                choices=["Velocity", "Strategy", "CFG Scale", "Steps", "Model Order"],
-                value="Strategy",
-            )
-            y_values = gr.Textbox(label="Y Values (comma separated)", value="mix, addition")
-
             with gr.Accordion("Generation Settings", open=False):
                 prompt = gr.Textbox(label="Prompt", value="A beautiful landscape")
-                negative_prompt = gr.Textbox(label="Negative Prompt", value="blurry, low quality")
-                width = gr.Slider(label="Width", minimum=256, maximum=1024, step=64, value=512)
-                height = gr.Slider(label="Height", minimum=256, maximum=1024, step=64, value=512)
-                fixed_seed = gr.Number(label="Seed (-1 or 0 for random)", value=-1, precision=0)
+                negative_prompt = gr.Textbox(
+                    label="Negative Prompt", value="blurry, low quality"
+                )
+                width = gr.Slider(
+                    label="Width", minimum=256, maximum=1024, step=64, value=512
+                )
+                height = gr.Slider(
+                    label="Height", minimum=256, maximum=1024, step=64, value=512
+                )
+                fixed_seed = gr.Number(
+                    label="Seed (-1 or 0 for random)", value=-1, precision=0
+                )
 
             generate_btn = gr.Button("Generate XY Grid", variant="primary")
             output_log = gr.Textbox(label="Log", interactive=False)
@@ -63,18 +82,32 @@ def render_xyz_plot_tab():
         import sys
         import random
 
-        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+        sys.path.insert(
+            0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        )
         from main import main as merger_main
-        from module.generation import generate_image
+        from module.generation import generate_first_image
         from module.extension_manager import load_extensions
 
         load_extensions()
 
         x_vals = [x.strip() for x in xv.split(",") if x.strip()]
-        y_vals = [y.strip() for y in yv.split(",") if y.strip()] if yt != "None" else ["None"]
-        z_vals = [z.strip() for z in zv.split(",") if z.strip()] if zt != "None" else ["None"]
+        y_vals = (
+            [y.strip() for y in yv.split(",") if y.strip()]
+            if yt != "None"
+            else ["None"]
+        )
+        z_vals = (
+            [z.strip() for z in zv.split(",") if z.strip()]
+            if zt != "None"
+            else ["None"]
+        )
 
-        actual_seed = int(seed_in) if int(seed_in) > 0 else random.randint(1, 1125899906842624)
+        actual_seed = (
+            int(seed_in) if int(seed_in) > 0 else random.randint(1, 1125899906842624)
+        )
+        w = int(w)
+        h = int(h)
 
         def parse_val(vtype, val):
             if val == "None":
@@ -131,68 +164,88 @@ def render_xyz_plot_tab():
                     if zt == "Steps":
                         steps = z_val
 
-                # Check for Model Order
-                left_model = get_model_path(ma)
-                right_model = get_model_path(mb)
+                    left_model = get_model_path(ma)
+                    right_model = get_model_path(mb)
 
-                model_order = "A->B"
-                if xt == "Model Order":
-                    model_order = str(x_val).strip()
-                if yt == "Model Order":
-                    model_order = str(y_val).strip()
-                if zt == "Model Order":
-                    model_order = str(z_val).strip()
+                    model_order = "A->B"
+                    if xt == "Model Order":
+                        model_order = str(x_val).strip()
+                    if yt == "Model Order":
+                        model_order = str(y_val).strip()
+                    if zt == "Model Order":
+                        model_order = str(z_val).strip()
 
-                if model_order == "B->A":
-                    left_model, right_model = right_model, left_model
+                    if model_order == "B->A":
+                        left_model, right_model = right_model, left_model
 
-                merge_params = [xt, yt, zt]
-                if any(p in ["Velocity", "Strategy", "Model Order"] for p in merge_params):
-                    config = {
-                        "target_model": left_model,
-                        "models": [
-                            {
-                                "left": left_model,
-                                "right": right_model,
-                                "strategy": strategy,
-                                "velocity": velocity,
-                                "key_patterns": ["."],
-                            }
-                        ],
-                    }
-                    cfg_file = os.path.join(tmp_dir, f"cfg_{y_idx}_{x_idx}.yaml")
-                    with open(cfg_file, "w") as f:
-                        yaml.dump(config, f)
+                    merge_params = [xt, yt, zt]
+                    if any(
+                        p in ["Velocity", "Strategy", "Model Order"]
+                        for p in merge_params
+                    ):
+                        config = {
+                            "target_model": left_model,
+                            "models": [
+                                {
+                                    "left": left_model,
+                                    "right": right_model,
+                                    "strategy": strategy,
+                                    "velocity": velocity,
+                                    "key_patterns": ["."],
+                                }
+                            ],
+                        }
+                        cfg_file = os.path.join(
+                            tmp_dir, f"cfg_{z_idx}_{y_idx}_{x_idx}.yaml"
+                        )
+                        with open(cfg_file, "w") as f:
+                            yaml.dump(config, f)
 
-                    log += f"Merging for {xt}={x_val}, {yt}={y_val}, {zt}={z_val}...\n"
-                    merger_main(cfg_file, tmp_dir)
+                        import glob
 
-                    # Find newest file in tmp_dir
-                    import glob
+                        for stale_file in glob.glob(
+                            os.path.join(tmp_dir, "*.safetensors")
+                        ):
+                            os.remove(stale_file)
 
-                    files = glob.glob(os.path.join(tmp_dir, "*.safetensors"))
-                    out_model = max(files, key=os.path.getctime) if files else get_model_path(ma)
-                else:
-                    out_model = get_model_path(ma)
+                        log += (
+                            f"Merging for {xt}={x_val}, {yt}={y_val}, {zt}={z_val}...\n"
+                        )
+                        merger_main(cfg_file, tmp_dir)
 
-                log += f"Generating image for {xt}={x_val}, {yt}={y_val}, {zt}={z_val}...\n"
-                img = generate_image(
-                    model_path=out_model,
-                    prompt=p,
-                    negative_prompt=np,
-                    width=w,
-                    height=h,
-                    steps=steps,
-                    cfg=cfg,
-                    sampler_name="euler",
-                    scheduler="normal",
-                    seed=actual_seed,
-                )
+                        files = glob.glob(os.path.join(tmp_dir, "*.safetensors"))
+                        if not files:
+                            return (
+                                None,
+                                log
+                                + f"\nFailed to create merged model for {x_val}, {y_val}, {z_val}",
+                            )
 
-                if img is None:
-                    return None, log + f"\nFailed to generate for {x_val}, {y_val}, {z_val}"
+                        out_model = max(files, key=os.path.getctime)
+                    else:
+                        out_model = get_model_path(ma)
 
-                images.append(img)
+                    log += f"Generating image for {xt}={x_val}, {yt}={y_val}, {zt}={z_val}...\n"
+                    img = generate_first_image(
+                        model_path=out_model,
+                        prompt=p,
+                        negative_prompt=np,
+                        width=w,
+                        height=h,
+                        steps=steps,
+                        cfg=cfg,
+                        sampler_name="euler",
+                        scheduler="normal",
+                        seed=actual_seed,
+                    )
+
+                    if img is None:
+                        return (
+                            None,
+                            log + f"\nFailed to generate for {x_val}, {y_val}, {z_val}",
+                        )
+
+                    images.append(img)
 
             grid_w = len(x_vals) * w
             grid_h = len(y_vals) * h
@@ -223,12 +276,16 @@ def render_xyz_plot_tab():
         if not frames:
             return None, log + "\nNo images generated."
 
-        out_path = os.path.abspath(os.path.join("./merged", f"xyz_grid_{actual_seed}.gif"))
+        out_path = os.path.abspath(
+            os.path.join("./merged", f"xyz_grid_{actual_seed}.gif")
+        )
         if len(frames) == 1:
             out_path = out_path.replace(".gif", ".png")
             frames[0].save(out_path)
         else:
-            frames[0].save(out_path, save_all=True, append_images=frames[1:], duration=1500, loop=0)
+            frames[0].save(
+                out_path, save_all=True, append_images=frames[1:], duration=1500, loop=0
+            )
 
         log += "Grid completed successfully!"
         return out_path, log

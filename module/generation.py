@@ -70,7 +70,9 @@ def _get_scheduler(sampler_name: str, scheduler_type: str, current_config: dict)
     scheduler_cls_name = _SCHEDULER_MAP.get(sampler_name, "EulerDiscreteScheduler")
     scheduler_cls = getattr(diffusers, scheduler_cls_name, None)
     if scheduler_cls is None:
-        logger.warning(f"スケジューラ '{scheduler_cls_name}' が見つかりません。EulerDiscreteScheduler を使用します。")
+        logger.warning(
+            f"スケジューラ '{scheduler_cls_name}' が見つかりません。EulerDiscreteScheduler を使用します。"
+        )
         from diffusers import EulerDiscreteScheduler
 
         scheduler_cls = EulerDiscreteScheduler
@@ -83,7 +85,9 @@ def _get_scheduler(sampler_name: str, scheduler_type: str, current_config: dict)
     try:
         return scheduler_cls.from_config(current_config, **kwargs)
     except Exception as e:
-        logger.warning(f"スケジューラ設定の適用に失敗: {e}。デフォルト設定を使用します。")
+        logger.warning(
+            f"スケジューラ設定の適用に失敗: {e}。デフォルト設定を使用します。"
+        )
         from diffusers import EulerDiscreteScheduler
 
         return EulerDiscreteScheduler.from_config(current_config)
@@ -112,7 +116,12 @@ def get_cache_info() -> dict:
     """現在のキャッシュの状態(読み込み済みのモデルとそのサイズ)を返す"""
     total_gb = sum(item["size_gb"] for item in _MODEL_CACHE.values())
     models = list(_MODEL_CACHE.keys())
-    return {"total_gb": total_gb, "max_gb": MAX_CACHE_SIZE_GB, "models": models, "count": len(models)}
+    return {
+        "total_gb": total_gb,
+        "max_gb": MAX_CACHE_SIZE_GB,
+        "models": models,
+        "count": len(models),
+    }
 
 
 def _evict_cache_if_needed(new_size_gb: float):
@@ -162,7 +171,9 @@ def get_cached_pipeline(model_path: str):
     if is_sdxl:
         from diffusers import StableDiffusionXLPipeline
 
-        logger.info(f"SDXL チェックポイントを読み込み中: {model_path} ({size_gb:.2f} GB)")
+        logger.info(
+            f"SDXL チェックポイントを読み込み中: {model_path} ({size_gb:.2f} GB)"
+        )
         pipe = StableDiffusionXLPipeline.from_single_file(
             model_path,
             torch_dtype=torch.float16,
@@ -171,7 +182,9 @@ def get_cached_pipeline(model_path: str):
     else:
         from diffusers import StableDiffusionPipeline
 
-        logger.info(f"SD1.5 チェックポイントを読み込み中: {model_path} ({size_gb:.2f} GB)")
+        logger.info(
+            f"SD1.5 チェックポイントを読み込み中: {model_path} ({size_gb:.2f} GB)"
+        )
         pipe = StableDiffusionPipeline.from_single_file(
             model_path,
             torch_dtype=torch.float16,
@@ -207,7 +220,7 @@ def generate_image(
     sampler_name: str = "euler",
     scheduler: str = "normal",
     seed: int = 1337,
-) -> Image.Image | None:
+) -> list[Image.Image] | None:
     """diffusers を使って画像を生成する。
 
     Args:
@@ -239,7 +252,9 @@ def generate_image(
         # 複数プロンプトのパース（改行区切り）
         prompts = [p.strip() for p in prompt.split("\n") if p.strip()]
         if not prompts:
-            logger.warning("プロンプトが空です。1枚の画像をデフォルトプロンプト生成します。")
+            logger.warning(
+                "プロンプトが空です。1枚の画像をデフォルトプロンプト生成します。"
+            )
             prompts = [""]
 
         negative_prompts = [negative_prompt] * len(prompts)
@@ -256,7 +271,7 @@ def generate_image(
                 generator.seed()
 
             logger.info(
-                f"画像を生成中 [{i+1}/{len(prompts)}]... (steps={steps}, cfg={cfg}, size={width}x{height}, seed={current_seed})"
+                f"画像を生成中 [{i + 1}/{len(prompts)}]... (steps={steps}, cfg={cfg}, size={width}x{height}, seed={current_seed})"
             )
             result = pipe(
                 prompt=p,
@@ -278,3 +293,10 @@ def generate_image(
 
         traceback.print_exc()
         raise GenerationError(f"Image generation failed: {e}", original_error=e)
+
+
+def generate_first_image(*args, **kwargs) -> Image.Image | None:
+    images = generate_image(*args, **kwargs)
+    if not images:
+        return None
+    return images[0]

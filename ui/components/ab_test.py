@@ -3,7 +3,7 @@ import gradio as gr
 import yaml
 
 from ui.utils import get_model_list, get_model_path
-from module.generation import generate_image
+from module.generation import generate_first_image
 from module.metrics import calculate_clip_score, generate_radar_chart
 
 
@@ -20,19 +20,41 @@ def render_ab_test_tab():
 
             strategy = gr.Dropdown(
                 label="Merge Strategy",
-                choices=["addition", "subtraction", "multiplication", "mix", "cosineA", "cosineB", "smoothAdd"],
+                choices=[
+                    "addition",
+                    "subtraction",
+                    "multiplication",
+                    "mix",
+                    "cosineA",
+                    "cosineB",
+                    "smoothAdd",
+                ],
                 value="mix",
             )
-            velocity = gr.Slider(label="Velocity (alpha)", minimum=0.0, maximum=1.0, step=0.01, value=0.5)
+            velocity = gr.Slider(
+                label="Velocity (alpha)", minimum=0.0, maximum=1.0, step=0.01, value=0.5
+            )
 
             with gr.Accordion("Generation Settings", open=True):
-                prompt = gr.Textbox(label="Prompt", value="A highly detailed masterpiece, best quality")
-                negative_prompt = gr.Textbox(label="Negative Prompt", value="worst quality, bad, blurry")
+                prompt = gr.Textbox(
+                    label="Prompt", value="A highly detailed masterpiece, best quality"
+                )
+                negative_prompt = gr.Textbox(
+                    label="Negative Prompt", value="worst quality, bad, blurry"
+                )
                 seed = gr.Number(label="Seed", value=12345, precision=0)
-                width = gr.Slider(label="Width", minimum=256, maximum=1024, step=64, value=512)
-                height = gr.Slider(label="Height", minimum=256, maximum=1024, step=64, value=512)
-                steps = gr.Slider(label="Steps", minimum=1, maximum=150, step=1, value=20)
-                cfg = gr.Slider(label="CFG Scale", minimum=1.0, maximum=30.0, step=0.5, value=7.0)
+                width = gr.Slider(
+                    label="Width", minimum=256, maximum=1024, step=64, value=512
+                )
+                height = gr.Slider(
+                    label="Height", minimum=256, maximum=1024, step=64, value=512
+                )
+                steps = gr.Slider(
+                    label="Steps", minimum=1, maximum=150, step=1, value=20
+                )
+                cfg = gr.Slider(
+                    label="CFG Scale", minimum=1.0, maximum=30.0, step=0.5, value=7.0
+                )
 
             generate_btn = gr.Button("Generate Comparison", variant="primary")
             metrics_btn = gr.Button("Calculate Metrics (CLIP Score)")
@@ -58,7 +80,9 @@ def render_ab_test_tab():
 
         import sys
 
-        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+        sys.path.insert(
+            0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        )
         from main import main as merger_main
 
         log = f"Starting comparison with seed: {s}\n"
@@ -66,7 +90,7 @@ def render_ab_test_tab():
 
         def _generate(model_path, title):
             log_str = f"Generating {title}...\n"
-            img = generate_image(
+            img = generate_first_image(
                 model_path=model_path,
                 prompt=p,
                 negative_prompt=np,
@@ -105,11 +129,18 @@ def render_ab_test_tab():
             with open(cfg_file, "w") as f:
                 yaml.dump(config, f)
 
-            merger_main(cfg_file, tmp_dir)
             import glob
 
+            for stale_file in glob.glob(os.path.join(tmp_dir, "*.safetensors")):
+                os.remove(stale_file)
+
+            merger_main(cfg_file, tmp_dir)
+
             files = glob.glob(os.path.join(tmp_dir, "*.safetensors"))
-            out_model = max(files, key=os.path.getctime) if files else get_model_path(left_name)
+            if not files:
+                return None, f"Failed to create merged model for {title}.\n"
+
+            out_model = max(files, key=os.path.getctime)
 
             img_res, l_res = _generate(out_model, title)
             return img_res, l_res
@@ -128,8 +159,15 @@ def render_ab_test_tab():
         return img_a_res, img_b_res, img_ab_res, img_ba_res, images_generated, log
 
     def calculate_current_metrics(images_dict, p):
-        if not images_dict or "Model A" not in images_dict or images_dict["Model A"] is None:
-            return None, "No valid images generated yet. Please Generate Comparison first."
+        if (
+            not images_dict
+            or "Model A" not in images_dict
+            or images_dict["Model A"] is None
+        ):
+            return (
+                None,
+                "No valid images generated yet. Please Generate Comparison first.",
+            )
 
         log = "Calculating CLIP Scores...\n"
         metrics_data = {}
@@ -149,8 +187,24 @@ def render_ab_test_tab():
 
     generate_btn.click(
         run_comparison,
-        inputs=[model_a, model_b, strategy, velocity, prompt, negative_prompt, seed, width, height, steps, cfg],
+        inputs=[
+            model_a,
+            model_b,
+            strategy,
+            velocity,
+            prompt,
+            negative_prompt,
+            seed,
+            width,
+            height,
+            steps,
+            cfg,
+        ],
         outputs=[img_a, img_b, img_ab, img_ba, state_images, output_log],
     )
 
-    metrics_btn.click(calculate_current_metrics, inputs=[state_images, prompt], outputs=[radar_plot, output_log])
+    metrics_btn.click(
+        calculate_current_metrics,
+        inputs=[state_images, prompt],
+        outputs=[radar_plot, output_log],
+    )

@@ -4,7 +4,9 @@ import logging
 from typing import List, Dict, Any
 
 
-def calculate_alphas(initial_alpha: float, iterations: int, decay_type: str) -> List[float]:
+def calculate_alphas(
+    initial_alpha: float, iterations: int, decay_type: str
+) -> List[float]:
     """反復マージ用の減衰アルファ値リストを計算する。"""
     alphas = []
     for i in range(iterations):
@@ -35,7 +37,7 @@ def run_poison_merge(config: Dict[str, Any], task_name: str = "Poison Merge") ->
     3. [次ステップへ] 出力されたマージ済みモデルを新たなBaseとして続行
     """
     from main import main as merger_main
-    from module.generation import generate_image
+    from module.generation import generate_first_image
     from PIL import Image, ImageDraw
 
     p_config = config["poison_merge"]
@@ -55,14 +57,18 @@ def run_poison_merge(config: Dict[str, Any], task_name: str = "Poison Merge") ->
     # オーバーライドがあればパースして上書き
     if alpha_overrides_str:
         try:
-            overrides = [float(x.strip()) for x in alpha_overrides_str.split(",") if x.strip()]
+            overrides = [
+                float(x.strip()) for x in alpha_overrides_str.split(",") if x.strip()
+            ]
             if overrides:
                 # 入力された数に合わせてイテレーション回数を調整
                 alphas = overrides
                 iterations = len(alphas)
                 logging.info(f"[{task_name}] Using custom alpha overrides: {alphas}")
         except ValueError:
-            logging.warning(f"[{task_name}] Invalid alpha overrides format. Falling back to calculated curve.")
+            logging.warning(
+                f"[{task_name}] Invalid alpha overrides format. Falling back to calculated curve."
+            )
 
     logging.info(f"[{task_name}] Target Alphas: {alphas}")
 
@@ -72,10 +78,12 @@ def run_poison_merge(config: Dict[str, Any], task_name: str = "Poison Merge") ->
     current_base = base_model
 
     for i, current_alpha in enumerate(alphas):
-        logging.info(f"[{task_name}] Step {i+1}/{iterations}, Alpha: {current_alpha:.3f}")
+        logging.info(
+            f"[{task_name}] Step {i + 1}/{iterations}, Alpha: {current_alpha:.3f}"
+        )
 
         # モデル名: <basename>_step<X>.safetensors
-        out_name = f"poison_step_{i+1}_alpha_{current_alpha:.2f}.safetensors"
+        out_name = f"poison_step_{i + 1}_alpha_{current_alpha:.2f}.safetensors"
         out_path = os.path.join(output_dir, out_name)
 
         # マージ用の設定を動的生成
@@ -105,15 +113,19 @@ def run_poison_merge(config: Dict[str, Any], task_name: str = "Poison Merge") ->
         try:
             # マージ実行
             merger_main(tmp_cfg, output_dir)
-            logging.info(f"[{task_name}] Step {i+1} Merge completed: {out_name}")
+            logging.info(f"[{task_name}] Step {i + 1} Merge completed: {out_name}")
 
             # 画像生成
             import random
 
-            actual_seed = int(seed) if int(seed) > 0 else random.randint(1, 1125899906842624)
-            logging.info(f"[{task_name}] Step {i+1} Generating image with seed: {actual_seed}")
+            actual_seed = (
+                int(seed) if int(seed) > 0 else random.randint(1, 1125899906842624)
+            )
+            logging.info(
+                f"[{task_name}] Step {i + 1} Generating image with seed: {actual_seed}"
+            )
 
-            img = generate_image(
+            img = generate_first_image(
                 model_path=out_path,
                 prompt=prompt,
                 negative_prompt=negative_prompt,
@@ -129,13 +141,13 @@ def run_poison_merge(config: Dict[str, Any], task_name: str = "Poison Merge") ->
             if img:
                 images.append((img, current_alpha))
             else:
-                logging.warning(f"[{task_name}] Step {i+1} Image generation failed.")
+                logging.warning(f"[{task_name}] Step {i + 1} Image generation failed.")
 
             # 次のイテレーションのBaseを今回の出力モデルにする
             current_base = out_path
 
         except Exception as e:
-            logging.error(f"[{task_name}] Step {i+1} Failed: {e}")
+            logging.error(f"[{task_name}] Step {i + 1} Failed: {e}")
             break
         finally:
             if os.path.exists(tmp_cfg):
@@ -152,7 +164,7 @@ def run_poison_merge(config: Dict[str, Any], task_name: str = "Poison Merge") ->
         for idx, (img, alpha) in enumerate(images):
             px = idx * w
             grid_img.paste(img, (px, 0))
-            text = f"Step {idx+1}: Alpha {alpha:.3f}"
+            text = f"Step {idx + 1}: Alpha {alpha:.3f}"
             # 背景色をつけて見やすくする
             draw.rectangle([(px + 5, 5), (px + 150, 25)], fill="black")
             draw.text((px + 10, 10), text, fill="white")

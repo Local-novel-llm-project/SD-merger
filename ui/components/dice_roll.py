@@ -2,7 +2,8 @@ import gradio as gr
 import os
 import random
 import yaml
-from module.generation import generate_image
+
+from module.generation import generate_first_image
 from ui.utils import get_model_list, get_model_path
 
 
@@ -15,12 +16,8 @@ def render_dice_roll_tab():
     with gr.Row():
         with gr.Column(scale=1):
             model_list = get_model_list()
-            model_a = gr.Dropdown(
-                label="Model A (Left)", choices=model_list
-            )
-            model_b = gr.Dropdown(
-                label="Model B (Right)", choices=model_list
-            )
+            model_a = gr.Dropdown(label="Model A (Left)", choices=model_list)
+            model_b = gr.Dropdown(label="Model B (Right)", choices=model_list)
 
             with gr.Accordion("Randomization Constraints", open=True):
                 strat_options = gr.CheckboxGroup(
@@ -62,7 +59,9 @@ def render_dice_roll_tab():
                 height = gr.Slider(
                     label="Height", minimum=256, maximum=1024, step=64, value=512
                 )
-                fixed_seed = gr.Number(label="Seed (-1 or 0 for random)", value=-1, precision=0)
+                fixed_seed = gr.Number(
+                    label="Seed (-1 or 0 for random)", value=-1, precision=0
+                )
 
             roll_btn = gr.Button("🎲 Roll the Dice!", variant="primary")
 
@@ -97,10 +96,17 @@ def render_dice_roll_tab():
         # Roll MBW
         mbw = [round(random.uniform(a_min, a_max), 3) for _ in range(26)]
         mbw_str = ",".join(map(str, mbw))
-        
-        actual_seed = int(seed_in) if int(seed_in) > 0 else random.randint(1, 1125899906842624)
 
-        rolled_params = {"strategy": strategy, "velocity": velocity, "mbw": mbw_str, "seed": actual_seed}
+        actual_seed = (
+            int(seed_in) if int(seed_in) > 0 else random.randint(1, 1125899906842624)
+        )
+
+        rolled_params = {
+            "strategy": strategy,
+            "velocity": velocity,
+            "mbw": mbw_str,
+            "seed": actual_seed,
+        }
 
         # Config
         tmp_dir = os.path.abspath("./merged/dice_tmp")
@@ -128,10 +134,12 @@ def render_dice_roll_tab():
         log = f"Rolled: Strategy={strategy}, Velocity={velocity}, Seed={actual_seed}\nMerging...\n"
 
         try:
-            merger_main(cfg_file, out_model)
-
-            # Use real merged file if merger_main uses a timestamp
             import glob
+
+            for stale_file in glob.glob(os.path.join(tmp_dir, "*.safetensors")):
+                os.remove(stale_file)
+
+            merger_main(cfg_file, tmp_dir)
 
             files = glob.glob(os.path.join(tmp_dir, "*.safetensors"))
             if files:
@@ -146,12 +154,12 @@ def render_dice_roll_tab():
             )
 
             log += "Generating image...\n"
-            img = generate_image(
+            img = generate_first_image(
                 model_path=out_model,
                 prompt=p,
                 negative_prompt=np,
-                width=w,
-                height=h,
+                width=int(w),
+                height=int(h),
                 steps=20,
                 cfg=7.0,
                 sampler_name="euler",
