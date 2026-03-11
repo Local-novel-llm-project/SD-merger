@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from copy import deepcopy
 
+from module.error_messages import build_user_error_message, build_user_error_summary
+
 
 class QueueManager:
     """マージタスクのバックグラウンドキューを管理するシングルトンクラス"""
@@ -157,6 +159,7 @@ class QueueManager:
 
             success = False
             error_msg = None
+            error_summary = None
             try:
                 config = task_to_run["config"]
 
@@ -190,13 +193,16 @@ class QueueManager:
                 success = True
 
             except Exception as e:
-                error_msg = str(e)
-                logging.error(f"Task failed: {error_msg}")
+                error_msg = build_user_error_message(
+                    e, action=f"{task_to_run['name']} の実行"
+                )
+                error_summary = build_user_error_summary(e)
+                logging.exception("Task failed during queue execution.")
                 # history save
                 history_entry = {
                     "config": task_to_run["config"],
                     "output_name": task_to_run["output_name"],
-                    "status": f"Failed: {error_msg}",
+                    "status": f"Failed: {error_summary}",
                 }
                 save_history(history_entry)
 
@@ -207,7 +213,11 @@ class QueueManager:
                         if task["id"] == task_to_run["id"]:
                             task["status"] = "completed" if success else "error"
                             task["progress"] = 1.0 if success else task.get("progress", 0.0)
-                            task["progress_desc"] = "Completed" if success else f"Error: {error_msg}"
+                            task["progress_desc"] = (
+                                "Completed"
+                                if success
+                                else error_summary or "Task failed."
+                            )
                             task["error"] = error_msg
                             task["completed_at"] = datetime.now().isoformat()
                             break

@@ -3,6 +3,7 @@ import os
 import random
 import yaml
 
+from module.error_messages import build_user_error_message
 from module.generation import generate_first_image
 from ui.utils import get_model_list, get_model_path
 
@@ -173,7 +174,7 @@ def render_dice_roll_tab():
                 return None, rolled_params, log + "Image generation failed."
 
         except Exception as e:
-            return None, rolled_params, f"Error: {str(e)}"
+            return None, rolled_params, build_user_error_message(e, action="Dice Roll 実行")
 
     roll_btn.click(
         run_dice,

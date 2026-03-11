@@ -1,4 +1,5 @@
 import gradio as gr
+from module.error_messages import build_user_error_message
 
 
 def parse_multi_merge_command(cmd_text: str):
@@ -103,7 +104,12 @@ def render_multi_merge_tab():
                 task_id = queue_manager.add_task(config, out_name, task_name=f"Batch Merge {i+1}")
                 log_msgs.append(f"Queued operation {i + 1} as task '{task_id}': Output expected as {out_name}")
             except Exception as e:
-                log_msgs.append(f"Error queuing operation {i + 1}: {str(e)}")
+                log_msgs.append(
+                    build_user_error_message(
+                        e,
+                        action=f"バッチ操作 {i + 1} の登録",
+                    )
+                )
 
         return "\n".join(log_msgs)
 

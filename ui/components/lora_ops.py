@@ -2,6 +2,7 @@ import os
 
 import gradio as gr
 
+from module.error_messages import build_user_error_message
 from ui.utils import get_model_list, get_model_path
 
 
@@ -335,4 +336,4 @@ def _run_lora_config(config, out_name, op_name):
             f"LoRA {op_name} task '{task_id}' added to queue. Output will be {out_name}"
         )
     except Exception as e:
-        return f"Error queuing LoRA {op_name}: {e}"
+        return build_user_error_message(e, action=f"LoRA {op_name} タスクの追加")

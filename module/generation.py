@@ -12,7 +12,7 @@ import torch
 from PIL import Image
 
 from module.logging_config import logger
-from module.exceptions import GenerationError
+from module.exceptions import GenerationError, ModelLoadError
 
 # --- モデルキャッシュ管理設定 ---
 MAX_CACHE_SIZE_GB = 10.0  # キャッシュするモデルの最大サイズ(GB)
@@ -166,47 +166,51 @@ def get_cached_pipeline(model_path: str):
     except Exception:
         size_gb = 6.0 if is_sdxl else 2.0  # fallback
 
-    _evict_cache_if_needed(size_gb)
+    try:
+        _evict_cache_if_needed(size_gb)
 
-    if is_sdxl:
-        from diffusers import StableDiffusionXLPipeline
+        if is_sdxl:
+            from diffusers import StableDiffusionXLPipeline
 
-        logger.info(
-            f"SDXL チェックポイントを読み込み中: {model_path} ({size_gb:.2f} GB)"
-        )
-        pipe = StableDiffusionXLPipeline.from_single_file(
-            model_path,
-            torch_dtype=torch.float16,
-            use_safetensors=True,
-        )
-    else:
-        from diffusers import StableDiffusionPipeline
+            logger.info(
+                f"SDXL チェックポイントを読み込み中: {model_path} ({size_gb:.2f} GB)"
+            )
+            pipe = StableDiffusionXLPipeline.from_single_file(
+                model_path,
+                torch_dtype=torch.float16,
+                use_safetensors=True,
+            )
+        else:
+            from diffusers import StableDiffusionPipeline
 
-        logger.info(
-            f"SD1.5 チェックポイントを読み込み中: {model_path} ({size_gb:.2f} GB)"
-        )
-        pipe = StableDiffusionPipeline.from_single_file(
-            model_path,
-            torch_dtype=torch.float16,
-            use_safetensors=True,
-        )
+            logger.info(
+                f"SD1.5 チェックポイントを読み込み中: {model_path} ({size_gb:.2f} GB)"
+            )
+            pipe = StableDiffusionPipeline.from_single_file(
+                model_path,
+                torch_dtype=torch.float16,
+                use_safetensors=True,
+            )
 
-    # デバイス・最適化の設定
-    if torch.cuda.is_available():
-        device = "cuda"
-        pipe = pipe.to(device)
-        try:
-            pipe.enable_attention_slicing()
-        except Exception:
-            pass
-    else:
-        device = "cpu"
-        logger.warning("CUDA が利用できません。CPU で実行します（低速）。")
-        pipe = pipe.to(device)
+        # デバイス・最適化の設定
+        if torch.cuda.is_available():
+            device = "cuda"
+            pipe = pipe.to(device)
+            try:
+                pipe.enable_attention_slicing()
+            except Exception:
+                pass
+        else:
+            device = "cpu"
+            logger.warning("CUDA が利用できません。CPU で実行します（低速）。")
+            pipe = pipe.to(device)
 
-    # キャッシュに保存
-    _MODEL_CACHE[model_path] = {"pipe": pipe, "size_gb": size_gb}
-    return pipe
+        # キャッシュに保存
+        _MODEL_CACHE[model_path] = {"pipe": pipe, "size_gb": size_gb}
+        return pipe
+    except Exception as e:
+        logger.error(f"モデル読み込み中にエラーが発生: {e}")
+        raise ModelLoadError("Failed to load model checkpoint.", original_error=e) from e
 
 
 def generate_image(
@@ -240,7 +244,10 @@ def generate_image(
     """
     if not Path(model_path).exists():
         logger.error(f"モデルファイルが見つかりません: {model_path}")
-        return None
+        raise ModelLoadError(
+            "Model file not found.",
+            original_error=FileNotFoundError(model_path),
+        )
 
     try:
         pipe = get_cached_pipeline(model_path)
@@ -287,6 +294,8 @@ def generate_image(
         logger.info(f"画像生成が完了しました。（計 {len(generated_images)} 枚）")
         return generated_images
 
+    except (GenerationError, ModelLoadError):
+        raise
     except Exception as e:
         logger.error(f"画像生成中にエラーが発生: {e}")
         import traceback

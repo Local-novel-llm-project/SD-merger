@@ -1,5 +1,6 @@
 import gradio as gr
 from module.analysis import analyze_models
+from module.error_messages import build_user_error_message, build_user_message
 from ui.utils import get_model_list, get_model_path
 
 
@@ -37,7 +38,16 @@ def render_analysis_tab():
 
     def run_analysis(ma, mb, met):
         if not ma or not mb:
-            return None, "Please upload both Model A and Model B."
+            return (
+                None,
+                None,
+                None,
+                build_user_message(
+                    "モデル解析",
+                    "Model A と Model B の両方が必要です。",
+                    "比較したい 2 つのモデルを選択してから再実行してください。",
+                ),
+            )
 
         try:
             fig_bar, fig_heat, fig_radar = analyze_models(get_model_path(ma), get_model_path(mb), metric=met)
@@ -46,7 +56,12 @@ def render_analysis_tab():
             import traceback
 
             traceback.print_exc()
-            return None, None, None, f"Error during analysis: {e}"
+            return (
+                None,
+                None,
+                None,
+                build_user_error_message(e, action="モデル解析"),
+            )
 
     analyze_btn.click(
         run_analysis,

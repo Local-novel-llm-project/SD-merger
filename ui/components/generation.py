@@ -1,4 +1,5 @@
 import gradio as gr
+from module.error_messages import build_user_error_message, build_user_message
 from module.generation import generate_image, clear_model_cache, get_cache_info
 from ui.utils import get_model_list, get_model_path
 
@@ -119,10 +120,14 @@ def render_generation_tab():
             if images and len(images) > 0:
                 return images, f"Generated successfully with seed {actual_seed}"
             else:
-                return None, "Generation failed. Check console logs for more details."
+                return None, build_user_message(
+                    "画像生成",
+                    "画像を生成できませんでした。",
+                    "モデル形式、プロンプト、サンプラー設定を確認してください。",
+                )
 
         except Exception as e:
-            return None, f"Error: {e}"
+            return None, build_user_error_message(e, action="画像生成")
 
     generate_btn.click(
         run_generation,

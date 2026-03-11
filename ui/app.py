@@ -19,6 +19,7 @@ from ui.components.poison_merge import render_poison_merge_tab
 from ui.components.ab_test import render_ab_test_tab
 from ui.utils import get_model_list, get_model_path
 
+from module.error_messages import build_user_error_message
 from ui.components.queue_ui import render_queue_tab
 from ui.components.bayesian_merger import create_bayesian_merger_ui
 from module.queue_manager import queue_manager
@@ -166,7 +167,7 @@ def create_ui():
                         task_id = queue_manager.add_task(config, out, task_name=f"Merge: {strat}")
                         return f"Merge task '{task_id}' added to queue. Output will be {out}"
                     except Exception as e:
-                        return f"Error queuing merge: {e}"
+                        return build_user_error_message(e, action="マージタスクの追加")
 
                 merge_btn.click(
                     run_merge,

@@ -1,6 +1,7 @@
 import gradio as gr
 import numpy as np
 import pandas as pd
+from module.error_messages import build_user_error_message, build_user_message
 from ui.utils import get_model_list, get_model_path
 
 
@@ -214,7 +215,11 @@ def render_mbw_each_tab():
 
     def run_mbw_each_merge(a, b, c, strat, t_strat, mbw_a_val, mbw_b_val, use_adv, out):
         if not a or not b:
-            return "Error: Model A and Model B are required."
+            return build_user_message(
+                "MBW Each マージ",
+                "Model A と Model B の両方が必要です。",
+                "両方のモデルを選択してから再実行してください。",
+            )
 
         try:
             # 入力チェック
@@ -222,9 +227,17 @@ def render_mbw_each_tab():
             len_b = len([x for x in mbw_b_val.split(",") if x.strip()])
 
             if len_a != len_b:
-                return f"Error: Length mismatch. A={len_a}, B={len_b}"
+                return build_user_message(
+                    "MBW Each マージ",
+                    f"MBW の長さが一致していません。A={len_a}, B={len_b}",
+                    "Model A と Model B の MBW 要素数を同じにしてください。",
+                )
             if len_a not in (26, 20):
-                return f"Error: Length must be 26 (SD1.5) or 20 (SDXL). Found {len_a}."
+                return build_user_message(
+                    "MBW Each マージ",
+                    f"MBW の長さが不正です。{len_a} 個入力されています。",
+                    "SD1.5 は 26 個、SDXL は 20 個の値を入力してください。",
+                )
 
             target_model_path = get_model_path(c) if c else get_model_path(a)
             config = {
@@ -250,7 +263,7 @@ def render_mbw_each_tab():
             return f"MBW Each merge task '{task_id}' added to queue.\nOutput will be: {out}"
 
         except Exception as e:
-            return f"Error: {str(e)}"
+            return build_user_error_message(e, action="MBW Each マージ")
 
     merge_btn.click(
         run_mbw_each_merge,

@@ -295,8 +295,8 @@
   - [x] `presets.py` L27: `except:` → 適切なエラーハンドリング
   - [x] `generation.py` L55: `except Exception` → `except OSError`
   - [x] `extension_manager.py` のフック実行部: 例外時のフォールバック戦略を明確化
-- [ ] ユーザー向けエラーメッセージの改善
-  - [ ] 技術的なスタックトレースではなく、対処法を含むメッセージ
+- [x] ユーザー向けエラーメッセージの改善
+  - [x] 技術的なスタックトレースではなく、対処法を含むメッセージ
 
 > **[考察]** `presets.py` の `load_preset()` は裸の `except:` で空辞書を返しており、
 > 設定ファイルの破損を完全に無視する。`generation.py` の SDXL 判定のフォールバック（ファイルサイズ推定）も

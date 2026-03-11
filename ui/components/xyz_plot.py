@@ -2,6 +2,7 @@ import os
 import gradio as gr
 import yaml
 from PIL import Image, ImageDraw
+from module.error_messages import build_user_message
 from module.xyz_plot_support import (
     build_axis_preview,
     get_axis_default_values,
@@ -145,7 +146,12 @@ def render_xyz_plot_tab():
             y_vals = parse_axis_values(yt, yv)
             z_vals = parse_axis_values(zt, zv)
         except ValueError as e:
-            return None, f"Invalid XYZ input: {e}"
+            return None, build_user_message(
+                "XYZ Plot 入力の検証",
+                "軸の入力形式が正しくありません。",
+                "カンマ区切り、または数値軸では start:end:step 形式を使用してください。",
+                detail=str(e),
+            )
 
         actual_seed = (
             int(seed_in) if int(seed_in) > 0 else random.randint(1, 1125899906842624)
@@ -286,7 +292,14 @@ def render_xyz_plot_tab():
                     if img is None:
                         return (
                             None,
-                            log + f"\nFailed to generate for {x_val}, {y_val}, {z_val}",
+                            log
+                            + "\n"
+                            + build_user_message(
+                                "XYZ Plot 画像生成",
+                                "一部のセルで画像を生成できませんでした。",
+                                "モデル形式、生成パラメータ、VRAM 使用量を確認してください。",
+                                detail=f"{xt}={x_val}, {yt}={y_val}, {zt}={z_val}",
+                            ),
                         )
 
                     images.append(img)

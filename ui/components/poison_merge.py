@@ -1,5 +1,6 @@
 import os
 import gradio as gr
+from module.error_messages import build_user_error_message
 from ui.utils import get_model_list, get_model_path
 
 
@@ -104,7 +105,7 @@ def render_poison_merge_tab():
             )
             return f"Poison Merge task '{task_id}' queued successfully. Check 'Tasks Queue' tab for progress."
         except Exception as e:
-            return f"Error queuing Poison Merge: {e}"
+            return build_user_error_message(e, action="Poison Merge タスクの追加")
 
     run_btn.click(
         run_poison,

@@ -1,5 +1,6 @@
 import gradio as gr
 from module.history import load_history, export_recipe
+from module.error_messages import build_user_error_message
 import pandas as pd
 import os
 import tempfile
@@ -117,7 +118,7 @@ def render_history_tab():
             task_id = queue_manager.add_task(entry["config"], entry["output_name"], task_name="History Re-run")
             return f"Re-run task '{task_id}' added to queue. Output will be {entry['output_name']}"
         except Exception as e:
-            return f"Error queuing re-run: {e}"
+            return build_user_error_message(e, action="履歴レシピの再実行登録")
 
     rerun_btn.click(on_rerun, inputs=[selected_index], outputs=[output_log])
 
@@ -147,7 +148,7 @@ def render_history_tab():
             task_id = queue_manager.add_task(config, out_name, task_name="Imported Recipe")
             return f"Imported recipe task '{task_id}' added to queue. Output will be {out_name}"
         except Exception as e:
-            return f"Error queuing imported recipe: {e}"
+            return build_user_error_message(e, action="インポートしたレシピの登録")
 
     import_run_btn.click(on_run_imported, inputs=[import_file], outputs=[output_log])
 
