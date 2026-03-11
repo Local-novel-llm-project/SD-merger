@@ -129,7 +129,7 @@ def normalize_std_mean(
     orig_std = torch.clamp(orig_std, min=eps)
     new_std = torch.clamp(new_std, min=eps)
 
-    return (mo - (new_mean - orig_mean)) * (orig_std / new_std)
+    return (mo - new_mean) * (orig_std / new_std) + orig_mean
 
 
 def get_normalization_calculation_strategy(strategy_name: str):
