@@ -1,6 +1,8 @@
 import os
 import sys
 import logging
+from types import SimpleNamespace
+
 from module.extension_manager import register_pre_config_hook
 
 
@@ -22,33 +24,29 @@ def run_lora_operations(config: dict) -> dict:
         sys.path.insert(0, kohyas_dir)
 
     operations = lora_ops.get("operations", [])
+    last_output_path = None
 
     for op in operations:
         op_type = op.get("type")
         if op_type == "extract":
-            _run_extract_lora(op)
-        elif op_type == "merge":
-            _run_merge_lora(op)
-        elif op_type == "apply":
-            logging.info(
-                "LoRAのCheckpointへの適用は、通常のmodels設定(strategy: replace)等を使用してsd-mechaで実行してください。"
-            )
+            last_output_path = _run_extract_lora(op)
+        elif op_type in {"merge", "apply"}:
+            last_output_path = _run_merge_lora(op)
         else:
             logging.warning(f"不明なLoRA操作タイプ: {op_type}")
 
-    # LoRA操作のみを行う場合、models設定を空にして終了させるか確認
-    if config.get("models") and lora_ops.get("stop_after_lora_ops", True):
+    if operations and lora_ops.get("stop_after_lora_ops", True):
         logging.info(
             "lora_opsが完了しました。stop_after_lora_opsがTrueのため、マージ処理をスキップします。"
         )
-        config["models"] = []
+        config["_skip_merge"] = True
+        config["_skip_merge_output"] = last_output_path
 
     return config
 
 
 def _run_extract_lora(op: dict):
     from .kohyas.extract_lora_from_models import svd
-    from types import SimpleNamespace
 
     logging.info("LoRA抽出(Extract)を実行します...")
     args = SimpleNamespace(
@@ -67,16 +65,33 @@ def _run_extract_lora(op: dict):
     )
     svd(args)
     logging.info(f"LoRA抽出が完了しました -> {op['output']}")
+    return op["output"]
+
+
+def _select_merge_runner(is_sdxl: bool):
+    if is_sdxl:
+        from .kohyas.sdxl_merge_lora import merge
+
+        return merge
+
+    from .kohyas.merge_lora import merge
+
+    return merge
 
 
 def _run_merge_lora(op: dict):
-    from .kohyas.merge_lora import merge
-    from types import SimpleNamespace
+    merge = _select_merge_runner(op.get("sdxl", False))
+    is_checkpoint_merge = bool(op.get("sd_model"))
 
-    logging.info("LoRA同士のマージ(Merge)を実行します...")
+    if is_checkpoint_merge:
+        logging.info("LoRAをモデルへマージします...")
+    else:
+        logging.info("LoRA同士のマージ(Merge)を実行します...")
+
     args = SimpleNamespace(
         models=op["models"],
         ratios=op.get("ratios", [1.0] * len(op["models"])),
+        sd_model=op.get("sd_model"),
         save_to=op["output"],
         precision=op.get("precision", "float"),
         save_precision=op.get("save_precision", "float"),
@@ -84,9 +99,14 @@ def _run_merge_lora(op: dict):
         v2=op.get("v2", False),
         concat=op.get("concat", False),
         shuffle=op.get("shuffle", False),
+        no_metadata=op.get("no_metadata", False),
     )
     merge(args)
-    logging.info(f"LoRAマージが完了しました -> {op['output']}")
+    if is_checkpoint_merge:
+        logging.info(f"LoRAのモデル適用が完了しました -> {op['output']}")
+    else:
+        logging.info(f"LoRAマージが完了しました -> {op['output']}")
+    return op["output"]
 
 
 def setup():

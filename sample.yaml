@@ -61,7 +61,7 @@ models:
 
 
 # --- 6. LoRA の操作 (lora_ops) ---
-# LoRA同士のマージや、CheckpointからのLoRA抽出を実行します。
+# LoRA同士のマージ、CheckpointからのLoRA抽出、モデルへのLoRA適用を実行します。
 # lora_ops:
 #   stop_after_lora_ops: true
 #   operations:
@@ -79,6 +79,14 @@ models:
 #       models: ["lora_A.safetensors", "lora_B.safetensors"]
 #       ratios: [0.5, 0.5]
 #       output: "merged_lora.safetensors"
+#       sdxl: true
+#
+#     # CheckpointへLoRAを適用 (Apply)
+#     - type: "apply"
+#       sd_model: "path/to/base_model.safetensors"
+#       models: ["lora_A.safetensors", "lora_B.safetensors"]
+#       ratios: [0.8, 0.2]
+#       output: "model_with_lora.safetensors"
 #       sdxl: true
 
 

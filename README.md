@@ -10,7 +10,7 @@ A command-line tool for merging Stable Diffusion models with flexible strategies
 - Multiple merge strategies: subtraction, addition, multiplication, average, replace
 - Block-level merging with MBW (Merge Block Weight) support
 - Extension system for custom merge algorithms
-- LoRA extraction and merging capabilities
+- LoRA extraction, LoRA merging, and applying LoRA weights to checkpoints
 - Stable Diffusion 1.5 and SDXL support
 
 
@@ -68,7 +68,7 @@ Extensions add extra functionality:
 | Extension | Description |
 |-----------|-------------|
 | `supermerger_mbw` | Merge Block Weight for layer-wise control |
-| `lora_ops` | LoRA extraction and merging |
+| `lora_ops` | LoRA extraction, merging, and checkpoint apply |
 | `resize_lora` | Resize LoRA ranks |
 | `quantum_merge` | Advanced merge algorithms |
 

@@ -10,7 +10,7 @@ Stable Diffusionモデルのマージを行うコマンドラインツールで�
 - 複数のマージ戦略: subtraction, addition, multiplication, average, replace
 - MBW (Merge Block Weight) によるレイヤー単位のマージ
 - 拡張機能システムによるカスタムマージアルゴリズム
-- LoRAの抽出とマージ機能
+- LoRAの抽出・LoRA同士のマージ・モデルへの適用機能
 - Stable Diffusion 1.5 と SDXL に対応
 
 
@@ -68,7 +68,7 @@ models:
 | 拡張機能 | 説明 |
 |---------|------|
 | `supermerger_mbw` | レイヤー単位のMerge Block Weight制御 |
-| `lora_ops` | LoRAの抽出とマージ |
+| `lora_ops` | LoRAの抽出・マージ・モデル適用 |
 | `resize_lora` | LoRAランクのリサイズ |
 | `quantum_merge` | 高度なマージアルゴリズム |
 
