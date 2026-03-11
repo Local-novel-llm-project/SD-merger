@@ -241,7 +241,7 @@
 
 ### 6. UI/UX 改善
 
-- [ ] XYZ Plotでの入力支援
+- [x] XYZ Plotでの入力支援
 - [x] マージ進捗のリアルタイムプログレスバー
   - [x] `sd_mecha` のコールバック or ログパースによる進捗取得
   - [x] Gradio `gr.Progress` コンポーネントとの連携

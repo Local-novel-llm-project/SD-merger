@@ -2,6 +2,12 @@ import os
 import gradio as gr
 import yaml
 from PIL import Image, ImageDraw
+from module.xyz_plot_support import (
+    build_axis_preview,
+    get_axis_default_values,
+    get_axis_help_text,
+    parse_axis_values,
+)
 from ui.utils import get_model_list, get_model_path
 
 
@@ -21,8 +27,11 @@ def render_xyz_plot_tab():
                 value="Velocity",
             )
             x_values = gr.Textbox(
-                label="X Values (comma separated)", value="0.25, 0.5, 0.75"
+                label="X Values",
+                value=get_axis_default_values("Velocity"),
+                placeholder=get_axis_default_values("Velocity"),
             )
+            x_help = gr.Markdown(get_axis_help_text("Velocity"))
 
             y_type = gr.Dropdown(
                 label="Y Type",
@@ -37,8 +46,11 @@ def render_xyz_plot_tab():
                 value="Strategy",
             )
             y_values = gr.Textbox(
-                label="Y Values (comma separated)", value="mix, addition"
+                label="Y Values",
+                value=get_axis_default_values("Strategy"),
+                placeholder=get_axis_default_values("Strategy"),
             )
+            y_help = gr.Markdown(get_axis_help_text("Strategy"))
 
             z_type = gr.Dropdown(
                 label="Z Type",
@@ -52,7 +64,27 @@ def render_xyz_plot_tab():
                 ],
                 value="None",
             )
-            z_values = gr.Textbox(label="Z Values (comma separated)", value="")
+            z_values = gr.Textbox(
+                label="Z Values",
+                value=get_axis_default_values("None"),
+                placeholder=get_axis_default_values("None"),
+            )
+            z_help = gr.Markdown(get_axis_help_text("None"))
+
+            apply_suggestions_btn = gr.Button("Use Suggested Values", size="sm")
+            axis_preview = gr.Textbox(
+                label="Axis Preview",
+                value=build_axis_preview(
+                    "Velocity",
+                    get_axis_default_values("Velocity"),
+                    "Strategy",
+                    get_axis_default_values("Strategy"),
+                    "None",
+                    get_axis_default_values("None"),
+                ),
+                interactive=False,
+                lines=4,
+            )
 
             with gr.Accordion("Generation Settings", open=False):
                 prompt = gr.Textbox(label="Prompt", value="A beautiful landscape")
@@ -75,6 +107,23 @@ def render_xyz_plot_tab():
         with gr.Column(scale=2):
             output_grid = gr.Image(label="XY(Z) Grid", type="filepath")
 
+    def update_axis_value_field(axis_type):
+        default_values = get_axis_default_values(axis_type)
+        return (
+            gr.update(placeholder=default_values),
+            get_axis_help_text(axis_type),
+        )
+
+    def apply_suggested_axis_values(xt, yt, zt):
+        x_defaults = get_axis_default_values(xt)
+        y_defaults = get_axis_default_values(yt)
+        z_defaults = get_axis_default_values(zt)
+        preview = build_axis_preview(xt, x_defaults, yt, y_defaults, zt, z_defaults)
+        return x_defaults, y_defaults, z_defaults, preview
+
+    def preview_axis_inputs(xt, xv, yt, yv, zt, zv):
+        return build_axis_preview(xt, xv, yt, yv, zt, zv)
+
     def run_xy(ma, mb, xt, xv, yt, yv, zt, zv, p, np, w, h, seed_in):
         if not ma or not mb:
             return None, "Model A and Model B required."
@@ -91,17 +140,12 @@ def render_xyz_plot_tab():
 
         load_extensions()
 
-        x_vals = [x.strip() for x in xv.split(",") if x.strip()]
-        y_vals = (
-            [y.strip() for y in yv.split(",") if y.strip()]
-            if yt != "None"
-            else ["None"]
-        )
-        z_vals = (
-            [z.strip() for z in zv.split(",") if z.strip()]
-            if zt != "None"
-            else ["None"]
-        )
+        try:
+            x_vals = parse_axis_values(xt, xv)
+            y_vals = parse_axis_values(yt, yv)
+            z_vals = parse_axis_values(zt, zv)
+        except ValueError as e:
+            return None, f"Invalid XYZ input: {e}"
 
         actual_seed = (
             int(seed_in) if int(seed_in) > 0 else random.randint(1, 1125899906842624)
@@ -289,6 +333,35 @@ def render_xyz_plot_tab():
 
         log += "Grid completed successfully!"
         return out_path, log
+
+    x_type.change(
+        update_axis_value_field,
+        inputs=[x_type],
+        outputs=[x_values, x_help],
+    )
+    y_type.change(
+        update_axis_value_field,
+        inputs=[y_type],
+        outputs=[y_values, y_help],
+    )
+    z_type.change(
+        update_axis_value_field,
+        inputs=[z_type],
+        outputs=[z_values, z_help],
+    )
+
+    for component in [x_type, x_values, y_type, y_values, z_type, z_values]:
+        component.change(
+            preview_axis_inputs,
+            inputs=[x_type, x_values, y_type, y_values, z_type, z_values],
+            outputs=[axis_preview],
+        )
+
+    apply_suggestions_btn.click(
+        apply_suggested_axis_values,
+        inputs=[x_type, y_type, z_type],
+        outputs=[x_values, y_values, z_values, axis_preview],
+    )
 
     generate_btn.click(
         run_xy,
