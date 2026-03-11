@@ -273,10 +273,10 @@
   - [x] `config_schema.py`: Pydantic モデルのテスト
   - [ ] `calc_method.py`: 各ストラテジーの入出力テスト（小さなテンソルで検証）
   - [ ] `calc_target.py`: ターゲットストラテジーのテスト
-  - [ ] `history.py`: ファイル I/O のテスト（一時ディレクトリ使用）
-  - [ ] `presets.py`: プリセット保存/読込のテスト
-  - [ ] `utility.py`: ファイル名生成、モデルパス正規化のテスト
-  - [ ] `extension_manager.py`: フック登録・実行のテスト
+  - [x] `history.py`: ファイル I/O のテスト（一時ディレクトリ使用）
+  - [x] `presets.py`: プリセット保存/読込のテスト
+  - [x] `utility.py`: ファイル名生成、モデルパス正規化のテスト
+  - [x] `extension_manager.py`: フック登録・実行のテスト
 - [ ] CI/CD パイプライン構築（lint, test, build）
   - [ ] GitHub Actions: `ruff check`, `pytest`, `mypy`
   - [ ] pre-commit hooks の設定

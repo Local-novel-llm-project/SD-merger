@@ -1,0 +1,5 @@
+models:
+  - left: model_a.safetensors
+    right: model_b.safetensors
+    velocity: 0.5
+    strategy: mix
