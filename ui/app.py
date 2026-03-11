@@ -17,7 +17,7 @@ from ui.components.presets import render_presets_tab
 from ui.components.lora_ops import render_lora_ops_tab
 from ui.components.poison_merge import render_poison_merge_tab
 from ui.components.ab_test import render_ab_test_tab
-from ui.utils import get_model_list, get_model_path
+from ui.utils import enqueue_merge_task, get_model_list, get_model_path
 
 from module.error_messages import build_user_error_message
 from ui.components.queue_ui import render_queue_tab
@@ -164,7 +164,11 @@ def create_ui():
                         out = f"queue_{int(vel * 100)}_{strat}.safetensors"
 
                     try:
-                        task_id = queue_manager.add_task(config, out, task_name=f"Merge: {strat}")
+                        task_id = enqueue_merge_task(
+                            config,
+                            out,
+                            task_name=f"Merge: {strat}",
+                        )
                         return f"Merge task '{task_id}' added to queue. Output will be {out}"
                     except Exception as e:
                         return build_user_error_message(e, action="マージタスクの追加")

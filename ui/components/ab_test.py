@@ -1,8 +1,9 @@
 import os
 import gradio as gr
-import yaml
 
+from module.error_messages import build_user_error_message
 from ui.utils import get_model_list, get_model_path
+from ui.utils import run_merge_from_config
 from module.generation import generate_first_image
 from module.metrics import calculate_clip_score, generate_radar_chart
 
@@ -78,85 +79,74 @@ def render_ab_test_tab():
         if not ma or not mb:
             return None, None, None, None, {}, "Please select Model A and Model B."
 
-        import sys
+        try:
+            log = f"Starting comparison with seed: {s}\n"
+            images_generated = {}
 
-        sys.path.insert(
-            0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        )
-        from main import main as merger_main
+            def _generate(model_path, title):
+                log_str = f"Generating {title}...\n"
+                img = generate_first_image(
+                    model_path=model_path,
+                    prompt=p,
+                    negative_prompt=np,
+                    width=int(w),
+                    height=int(h),
+                    steps=int(st),
+                    cfg=float(c),
+                    seed=int(s),
+                )
+                return img, log_str
 
-        log = f"Starting comparison with seed: {s}\n"
-        images_generated = {}
+            # Generate base models
+            img_a_res, l_a = _generate(get_model_path(ma), "Model A")
+            img_b_res, l_b = _generate(get_model_path(mb), "Model B")
+            log += l_a + l_b
+            images_generated["Model A"] = img_a_res
+            images_generated["Model B"] = img_b_res
 
-        def _generate(model_path, title):
-            log_str = f"Generating {title}...\n"
-            img = generate_first_image(
-                model_path=model_path,
-                prompt=p,
-                negative_prompt=np,
-                width=int(w),
-                height=int(h),
-                steps=int(st),
-                cfg=float(c),
-                seed=int(s),
+            tmp_dir = os.path.abspath("./merged/ab_tmp")
+
+            def _merge_and_generate(left_name, right_name, title):
+                config = {
+                    "target_model": get_model_path(left_name),
+                    "models": [
+                        {
+                            "left": get_model_path(left_name),
+                            "right": get_model_path(right_name),
+                            "strategy": strat,
+                            "velocity": float(vel),
+                            "key_patterns": ["."],
+                        }
+                    ],
+                }
+                out_model = run_merge_from_config(config, tmp_dir)
+                if not out_model:
+                    return None, f"Failed to create merged model for {title}.\n"
+
+                img_res, l_res = _generate(out_model, title)
+                return img_res, l_res
+
+            # A -> B
+            img_ab_res, l_ab = _merge_and_generate(ma, mb, "Merged A->B")
+            log += l_ab
+            images_generated["Merged (A->B)"] = img_ab_res
+
+            # B -> A
+            img_ba_res, l_ba = _merge_and_generate(mb, ma, "Merged B->A")
+            log += l_ba
+            images_generated["Merged (B->A)"] = img_ba_res
+
+            log += "Generation completed!"
+            return img_a_res, img_b_res, img_ab_res, img_ba_res, images_generated, log
+        except Exception as e:
+            return (
+                None,
+                None,
+                None,
+                None,
+                {},
+                build_user_error_message(e, action="A/B Test 比較生成"),
             )
-            return img, log_str
-
-        # Generate base models
-        img_a_res, l_a = _generate(get_model_path(ma), "Model A")
-        img_b_res, l_b = _generate(get_model_path(mb), "Model B")
-        log += l_a + l_b
-        images_generated["Model A"] = img_a_res
-        images_generated["Model B"] = img_b_res
-
-        tmp_dir = os.path.abspath("./merged/ab_tmp")
-        os.makedirs(tmp_dir, exist_ok=True)
-
-        def _merge_and_generate(left_name, right_name, title):
-            config = {
-                "target_model": get_model_path(left_name),
-                "models": [
-                    {
-                        "left": get_model_path(left_name),
-                        "right": get_model_path(right_name),
-                        "strategy": strat,
-                        "velocity": float(vel),
-                        "key_patterns": ["."],
-                    }
-                ],
-            }
-            cfg_file = os.path.join(tmp_dir, f"cfg_{title.replace(' ', '_')}.yaml")
-            with open(cfg_file, "w") as f:
-                yaml.dump(config, f)
-
-            import glob
-
-            for stale_file in glob.glob(os.path.join(tmp_dir, "*.safetensors")):
-                os.remove(stale_file)
-
-            merger_main(cfg_file, tmp_dir)
-
-            files = glob.glob(os.path.join(tmp_dir, "*.safetensors"))
-            if not files:
-                return None, f"Failed to create merged model for {title}.\n"
-
-            out_model = max(files, key=os.path.getctime)
-
-            img_res, l_res = _generate(out_model, title)
-            return img_res, l_res
-
-        # A -> B
-        img_ab_res, l_ab = _merge_and_generate(ma, mb, "Merged A->B")
-        log += l_ab
-        images_generated["Merged (A->B)"] = img_ab_res
-
-        # B -> A
-        img_ba_res, l_ba = _merge_and_generate(mb, ma, "Merged B->A")
-        log += l_ba
-        images_generated["Merged (B->A)"] = img_ba_res
-
-        log += "Generation completed!"
-        return img_a_res, img_b_res, img_ab_res, img_ba_res, images_generated, log
 
     def calculate_current_metrics(images_dict, p):
         if (

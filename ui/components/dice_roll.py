@@ -1,11 +1,10 @@
 import gradio as gr
 import os
 import random
-import yaml
 
 from module.error_messages import build_user_error_message
 from module.generation import generate_first_image
-from ui.utils import get_model_list, get_model_path
+from ui.utils import get_model_list, get_model_path, run_merge_from_config
 
 
 def render_dice_roll_tab():
@@ -77,16 +76,7 @@ def render_dice_roll_tab():
         if not allowed_strats:
             return None, {}, "Please select at least one strategy."
 
-        import sys
-
-        sys.path.insert(
-            0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        )
-        from main import main as merger_main
         from module.history import save_history
-        from module.extension_manager import load_extensions
-
-        load_extensions()
 
         # Roll strategy
         strategy = random.choice(allowed_strats)
@@ -127,24 +117,11 @@ def render_dice_roll_tab():
             ],
         }
 
-        cfg_file = os.path.join(tmp_dir, "dice_cfg.yaml")
-        with open(cfg_file, "w") as f:
-            yaml.dump(config, f)
-
         out_model = os.path.join(tmp_dir, "dice_result.safetensors")
         log = f"Rolled: Strategy={strategy}, Velocity={velocity}, Seed={actual_seed}\nMerging...\n"
 
         try:
-            import glob
-
-            for stale_file in glob.glob(os.path.join(tmp_dir, "*.safetensors")):
-                os.remove(stale_file)
-
-            merger_main(cfg_file, tmp_dir)
-
-            files = glob.glob(os.path.join(tmp_dir, "*.safetensors"))
-            if files:
-                out_model = max(files, key=os.path.getctime)
+            out_model = run_merge_from_config(config, tmp_dir) or out_model
 
             save_history(
                 {

@@ -1,6 +1,5 @@
 import os
 import gradio as gr
-import yaml
 from PIL import Image, ImageDraw
 from module.error_messages import build_user_message
 from module.xyz_plot_support import (
@@ -9,7 +8,7 @@ from module.xyz_plot_support import (
     get_axis_help_text,
     parse_axis_values,
 )
-from ui.utils import get_model_list, get_model_path
+from ui.utils import get_model_list, get_model_path, run_merge_from_config
 
 
 def render_xyz_plot_tab():
@@ -129,17 +128,9 @@ def render_xyz_plot_tab():
         if not ma or not mb:
             return None, "Model A and Model B required."
 
-        import sys
         import random
 
-        sys.path.insert(
-            0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        )
-        from main import main as merger_main
         from module.generation import generate_first_image
-        from module.extension_manager import load_extensions
-
-        load_extensions()
 
         try:
             x_vals = parse_axis_values(xt, xv)
@@ -245,33 +236,16 @@ def render_xyz_plot_tab():
                                 }
                             ],
                         }
-                        cfg_file = os.path.join(
-                            tmp_dir, f"cfg_{z_idx}_{y_idx}_{x_idx}.yaml"
-                        )
-                        with open(cfg_file, "w") as f:
-                            yaml.dump(config, f)
-
-                        import glob
-
-                        for stale_file in glob.glob(
-                            os.path.join(tmp_dir, "*.safetensors")
-                        ):
-                            os.remove(stale_file)
-
                         log += (
                             f"Merging for {xt}={x_val}, {yt}={y_val}, {zt}={z_val}...\n"
                         )
-                        merger_main(cfg_file, tmp_dir)
-
-                        files = glob.glob(os.path.join(tmp_dir, "*.safetensors"))
-                        if not files:
+                        out_model = run_merge_from_config(config, tmp_dir)
+                        if not out_model:
                             return (
                                 None,
                                 log
                                 + f"\nFailed to create merged model for {x_val}, {y_val}, {z_val}",
                             )
-
-                        out_model = max(files, key=os.path.getctime)
                     else:
                         out_model = get_model_path(ma)
 

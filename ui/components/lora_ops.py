@@ -3,7 +3,7 @@ import os
 import gradio as gr
 
 from module.error_messages import build_user_error_message
-from ui.utils import get_model_list, get_model_path
+from ui.utils import enqueue_merge_task, get_model_list, get_model_path
 
 
 def _resolve_output_path(output_name):
@@ -328,10 +328,8 @@ def render_lora_ops_tab():
 
 
 def _run_lora_config(config, out_name, op_name):
-    from module.queue_manager import queue_manager
-
     try:
-        task_id = queue_manager.add_task(config, out_name, task_name=f"LoRA {op_name}")
+        task_id = enqueue_merge_task(config, out_name, task_name=f"LoRA {op_name}")
         return (
             f"LoRA {op_name} task '{task_id}' added to queue. Output will be {out_name}"
         )

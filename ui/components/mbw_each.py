@@ -2,7 +2,7 @@ import gradio as gr
 import numpy as np
 import pandas as pd
 from module.error_messages import build_user_error_message, build_user_message
-from ui.utils import get_model_list, get_model_path
+from ui.utils import enqueue_merge_task, get_model_list, get_model_path
 
 
 def generate_curve(curve_type: str, start_val: float, end_val: float, length: int) -> list[float]:
@@ -256,9 +256,7 @@ def render_mbw_each_tab():
             if use_adv and out:
                 config["output_name"] = out
 
-            from module.queue_manager import queue_manager
-
-            task_id = queue_manager.add_task(config, out, task_name="MBW Each")
+            task_id = enqueue_merge_task(config, out, task_name="MBW Each")
 
             return f"MBW Each merge task '{task_id}' added to queue.\nOutput will be: {out}"
 

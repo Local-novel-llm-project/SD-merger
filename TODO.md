@@ -277,9 +277,9 @@
   - [x] `presets.py`: プリセット保存/読込のテスト
   - [x] `utility.py`: ファイル名生成、モデルパス正規化のテスト
   - [x] `extension_manager.py`: フック登録・実行のテスト
-- [ ] CI/CD パイプライン構築（lint, test, build）
-  - [ ] GitHub Actions: `ruff check`, `pytest`, `mypy`
-  - [ ] pre-commit hooks の設定
+- [x] CI/CD パイプライン構築（lint, test, build）
+  - [x] GitHub Actions: `ruff check`, `pytest`, `mypy`
+  - [x] pre-commit hooks の設定
 
 > **[考察]** 現在テストコードは完全に存在しない。`.ruff_cache/` はあるため ruff は導入済みだが、
 > CI での自動実行設定はない。`pytest` + `pytest-cov` でカバレッジ計測を推奨。
@@ -363,10 +363,10 @@
   - [ ] マージレシピ組み立てロジックを `module/recipe_builder.py` に抽出
   - [ ] コマンドライン処理を `cli.py` に分離
   - [ ] `main.py` は薄いエントリーポイントのみに
-- [ ] UI コンポーネントの共通パターン抽出
-  - [ ] 複数コンポーネント (`mbw_each.py`, `multi_merge.py`, `lora_ops.py`) で
-    `sys.path.insert` → `from main import main` を繰り返している → 共通ヘルパー化
-  - [ ] 一時 YAML ファイル生成パターンの共通ユーティリティ化
+- [x] UI コンポーネントの共通パターン抽出
+  - [x] 複数コンポーネント (`mbw_each.py`, `multi_merge.py`, `lora_ops.py`) で
+    キュー投入処理を繰り返している → 共通ヘルパー化
+  - [x] 一時 YAML ファイル生成 / `main()` 呼出パターンの共通ユーティリティ化
 
 > **[考察]** `ui/components/mbw_each.py` L80-84, `multi_merge.py` L97-100,
 > `lora_ops.py` L186-212 にほぼ同一の「Config → 一時 YAML → main() 呼出」パターンが重複。
@@ -433,7 +433,7 @@
 | カテゴリ | 該当ファイル | 内容 |
 |---------|------------|------|
 | 裸の `except` | `presets.py` 等 | (解決済) 適切なエラーハンドリングに置き換えました |
-| コード重複 | `mbw_each.py`, `multi_merge.py`, `lora_ops.py` | YAML 生成 → `main()` 呼出パターンが 3 箇所で重複 |
+| コード重複 | `ui/utils.py`, `ui/components/*` | (解決済) merge 実行とキュー投入の共通ヘルパーに集約 |
 | ハードコードパス | `presets.py`, `history.py`, `multi_merge.py` | `os.path.join(dirname, "..", "..")` の連鎖 |
 | SDXL 未対応 | `analysis.py` | `categorize_key()` が SD1.5 構造のみ前提 |
 | テスト不在 | 全モジュール | (一部緩和) 設定スキーマの単体テストを導入 |

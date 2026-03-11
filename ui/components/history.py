@@ -4,6 +4,7 @@ from module.error_messages import build_user_error_message
 import pandas as pd
 import os
 import tempfile
+from ui.utils import enqueue_merge_task
 
 
 def get_history_df():
@@ -108,14 +109,12 @@ def render_history_tab():
             return "Invalid row selected."
         entry = history[idx]
 
-        fd, path = tempfile.mkstemp(suffix=".yaml")
-        os.close(fd)
-        export_recipe(entry, path)
-
-        from module.queue_manager import queue_manager
-
         try:
-            task_id = queue_manager.add_task(entry["config"], entry["output_name"], task_name="History Re-run")
+            task_id = enqueue_merge_task(
+                entry["config"],
+                entry["output_name"],
+                task_name="History Re-run",
+            )
             return f"Re-run task '{task_id}' added to queue. Output will be {entry['output_name']}"
         except Exception as e:
             return build_user_error_message(e, action="履歴レシピの再実行登録")
@@ -134,7 +133,6 @@ def render_history_tab():
         if file is None:
             return "No file uploaded."
 
-        from module.queue_manager import queue_manager
         import yaml
 
         try:
@@ -145,7 +143,11 @@ def render_history_tab():
             if "models" in config and len(config["models"]) > 0 and "output_name" in config["models"][0]:
                 out_name = config["models"][0]["output_name"]
 
-            task_id = queue_manager.add_task(config, out_name, task_name="Imported Recipe")
+            task_id = enqueue_merge_task(
+                config,
+                out_name,
+                task_name="Imported Recipe",
+            )
             return f"Imported recipe task '{task_id}' added to queue. Output will be {out_name}"
         except Exception as e:
             return build_user_error_message(e, action="インポートしたレシピの登録")

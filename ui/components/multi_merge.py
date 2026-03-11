@@ -1,5 +1,6 @@
 import gradio as gr
 from module.error_messages import build_user_error_message
+from ui.utils import enqueue_merge_task
 
 
 def parse_multi_merge_command(cmd_text: str):
@@ -93,15 +94,17 @@ def render_multi_merge_tab():
         if not ops:
             return "No valid commands parsed."
 
-        from module.queue_manager import queue_manager
-
         log_msgs = []
         for i, op in enumerate(ops):
             config = {"target_model": op.get("left", ""), "models": [op]}
             out_name = op.pop("output_name", f"batch_merged_{i}.safetensors")
 
             try:
-                task_id = queue_manager.add_task(config, out_name, task_name=f"Batch Merge {i+1}")
+                task_id = enqueue_merge_task(
+                    config,
+                    out_name,
+                    task_name=f"Batch Merge {i+1}",
+                )
                 log_msgs.append(f"Queued operation {i + 1} as task '{task_id}': Output expected as {out_name}")
             except Exception as e:
                 log_msgs.append(

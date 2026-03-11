@@ -1,7 +1,7 @@
 import os
 import gradio as gr
 from module.error_messages import build_user_error_message
-from ui.utils import get_model_list, get_model_path
+from ui.utils import enqueue_merge_task, get_model_list, get_model_path
 
 
 def render_poison_merge_tab():
@@ -95,10 +95,8 @@ def render_poison_merge_tab():
             }
         }
 
-        from module.queue_manager import queue_manager
-
         try:
-            task_id = queue_manager.add_task(
+            task_id = enqueue_merge_task(
                 config,
                 output_name="poison_merge",
                 task_name=f"Poison Merge ({iters} iters, {len(resolved_loras)} LoRAs)",
