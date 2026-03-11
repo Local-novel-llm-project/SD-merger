@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 from module import extension_manager
 
@@ -25,24 +26,10 @@ def test_register_pre_config_hook_ignores_duplicates():
     _reset_extension_manager_state()
 
 
-def test_load_extensions_only_runs_setup_once(tmp_path):
+def test_load_extensions_only_runs_setup_once():
     _reset_extension_manager_state()
 
-    extensions_dir = tmp_path / "extensions"
-    module_dir = extensions_dir / "demo_ext"
-    module_dir.mkdir(parents=True)
-    module_dir.joinpath("__init__.py").write_text(
-        "from module.extension_manager import register_pre_config_hook\n"
-        "CALLS = 0\n"
-        "def hook(config):\n"
-        "    return config\n"
-        "def setup():\n"
-        "    global CALLS\n"
-        "    CALLS += 1\n"
-        "    register_pre_config_hook(hook)\n",
-        encoding="utf-8",
-    )
-
+    extensions_dir = Path(__file__).parent / "fixtures" / "extensions"
     sys.modules.pop("demo_ext", None)
 
     try:
