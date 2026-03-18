@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 import gradio as gr
 
 # Ensure the project root is in sys.path so 'ui' can be imported
@@ -25,6 +26,58 @@ from module.error_messages import build_user_error_message
 from ui.components.queue_ui import render_queue_tab
 from ui.components.bayesian_merger import create_bayesian_merger_ui
 from module.queue_manager import queue_manager
+
+
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 7860
+
+
+def create_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="SD-merger の Gradio UI を起動する")
+    parser.add_argument(
+        "--listen",
+        action="store_true",
+        help="0.0.0.0 にバインドして外部アクセスを受け付ける",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help=f"待ち受けポート番号 (default: {DEFAULT_PORT})",
+    )
+    return parser
+
+
+def resolve_launch_options(args: argparse.Namespace) -> dict:
+    return {
+        "server_name": "0.0.0.0" if args.listen else DEFAULT_HOST,
+        "server_port": args.port,
+        "share": False,
+        "theme": gr.themes.Soft(),
+        "head": build_head_content(),
+    }
+
+
+def build_head_content() -> str:
+    return """
+<style>
+/* Optional custom CSS overrides for better appearance */
+.gradio-container { max-width: 1400px !important; }
+</style>
+<script>
+// Keyboard shortcut handling
+document.addEventListener('keydown', function(e) {
+    // Ctrl+Enter or Cmd+Enter to trigger the primary button on active tab
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const primaryBtn = document.querySelector('.tabitem[style*="block"] button.primary');
+        if (primaryBtn) {
+            primaryBtn.click();
+            e.preventDefault();
+        }
+    }
+});
+</script>
+"""
 
 
 def _create_default_merge_output_name(model_a_name: str, model_b_name: str) -> str:
@@ -262,32 +315,9 @@ def create_ui():
 
     return app
 
-
-def get_head_content() -> str:
-    return """
-<style>
-/* Optional custom CSS overrides for better appearance */
-.gradio-container { max-width: 1400px !important; }
-</style>
-<script>
-// Keyboard shortcut handling
-document.addEventListener('keydown', function(e) {
-    // Ctrl+Enter or Cmd+Enter to trigger the primary button on active tab
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        const primaryBtn = document.querySelector('.tabitem[style*="block"] button.primary');
-        if (primaryBtn) {
-            primaryBtn.click();
-            e.preventDefault();
-        }
-    }
-});
-</script>
-"""
-
-
 def launch_ui(
     server_name: str = "0.0.0.0",
-    server_port: int = 7860,
+    server_port: int = DEFAULT_PORT,
     share: bool = False,
 ):
     app = create_ui()
@@ -296,9 +326,15 @@ def launch_ui(
         server_port=server_port,
         share=share,
         theme=gr.themes.Soft(),
-        head=get_head_content(),
+        head=build_head_content(),
     )
 
 
 if __name__ == "__main__":
-    launch_ui()
+    args = create_arg_parser().parse_args()
+    launch_options = resolve_launch_options(args)
+    launch_ui(
+        server_name=launch_options["server_name"],
+        server_port=launch_options["server_port"],
+        share=launch_options["share"],
+    )
