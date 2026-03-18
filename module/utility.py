@@ -84,6 +84,10 @@ class LazySafetensorsDict(dict):
         for k in self._keys:
             yield k, self.f.get_tensor(k)
 
+    def values(self):  # type: ignore
+        for k in self._keys:
+            yield self.f.get_tensor(k)
+
     def __getitem__(self, key):
         return self.f.get_tensor(key)
 
@@ -114,6 +118,10 @@ class ShardedLazySafetensorsDict(dict):
     def items(self):  # type: ignore
         for k in self._keys:
             yield k, self[k]
+
+    def values(self):  # type: ignore
+        for k in self._keys:
+            yield self[k]
 
     def __getitem__(self, key: str):
         if key not in self.weight_map:
