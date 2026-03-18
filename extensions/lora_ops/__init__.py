@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import importlib
+import json
 from types import SimpleNamespace
 import types
 
@@ -59,6 +60,46 @@ def _register_kohya_namespace(name: str, path: str) -> None:
         module.__path__ = existing_paths
 
 
+def _build_minimum_network_metadata(
+    v2,
+    base_model,
+    network_module,
+    network_dim,
+    network_alpha,
+    network_args,
+):
+    if network_args is None:
+        serialized_network_args = "{}"
+    elif isinstance(network_args, str):
+        serialized_network_args = network_args
+    else:
+        serialized_network_args = json.dumps(network_args)
+
+    return {
+        "ss_v2": str(bool(v2)),
+        "ss_base_model_version": base_model or "",
+        "ss_network_module": network_module,
+        "ss_network_dim": str(network_dim),
+        "ss_network_alpha": str(network_alpha),
+        "ss_network_args": serialized_network_args,
+    }
+
+
+def _ensure_kohya_train_util_compat(train_util_module, sai_model_spec_module) -> None:
+    if not hasattr(train_util_module, "load_metadata_from_safetensors"):
+        train_util_module.load_metadata_from_safetensors = (
+            sai_model_spec_module.load_metadata_from_safetensors
+        )
+    if not hasattr(train_util_module, "SS_METADATA_KEY_V2"):
+        train_util_module.SS_METADATA_KEY_V2 = "ss_v2"
+    if not hasattr(train_util_module, "SS_METADATA_KEY_BASE_MODEL_VERSION"):
+        train_util_module.SS_METADATA_KEY_BASE_MODEL_VERSION = "ss_base_model_version"
+    if not hasattr(train_util_module, "build_minimum_network_metadata"):
+        train_util_module.build_minimum_network_metadata = (
+            _build_minimum_network_metadata
+        )
+
+
 def _ensure_kohya_import_aliases() -> str:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     kohyas_dir = os.path.join(current_dir, "kohyas")
@@ -71,6 +112,19 @@ def _ensure_kohya_import_aliases() -> str:
     _register_kohya_namespace("scripts", current_dir)
     _register_kohya_namespace("scripts.kohyas", kohyas_dir)
     _register_kohya_namespace("library", kohyas_dir)
+
+    for train_util_name, sai_model_spec_name in [
+        ("scripts.kohyas.train_util", "scripts.kohyas.sai_model_spec"),
+        ("library.train_util", "library.sai_model_spec"),
+        (f"{__package__}.kohyas.train_util", f"{__package__}.kohyas.sai_model_spec"),
+    ]:
+        train_util_module = importlib.import_module(train_util_name)
+        sai_model_spec_module = importlib.import_module(sai_model_spec_name)
+        _ensure_kohya_train_util_compat(
+            train_util_module,
+            sai_model_spec_module,
+        )
+
     return kohyas_dir
 
 

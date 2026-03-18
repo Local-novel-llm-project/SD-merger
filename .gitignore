@@ -179,3 +179,5 @@ queue.json
 .kiro
 module/__pycache__/calc_target.cpython-311.pyc
 module/__pycache__/const.cpython-311.pyc
+# CocoIndex Code (ccc)
+/.cocoindex_code/

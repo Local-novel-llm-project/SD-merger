@@ -10,6 +10,14 @@ from module.lora_input import (
 from ui.utils import enqueue_merge_task, get_model_list, get_model_path
 
 
+DEFAULT_LORA_RATIO = 1.0
+REQUIRED_LORA_MODELS_MESSAGE = "At least one LoRA model is required."
+INVALID_RATIO_FORMAT_MESSAGE = (
+    "Invalid format. Use '0.5, 1.0' or "
+    "'lora_a.safetensors:0.5, lora_b.safetensors:1.0'."
+)
+
+
 def _resolve_output_path(output_name):
     if os.path.isabs(output_name):
         return os.path.abspath(output_name)
@@ -20,34 +28,140 @@ def _resolve_output_path(output_name):
     )
 
 
-def _has_compact_lora_spec_hint(ratio_text):
-    return bool(ratio_text and ":" in ratio_text)
+def _normalize_selected_lora_models(selected_models):
+    if not selected_models:
+        return []
+
+    return [
+        model_name
+        for model_name in (str(model).strip() for model in selected_models)
+        if model_name
+    ]
 
 
-def _parse_lora_models_and_ratios(selected_models, ratio_text):
+def _coerce_lora_ratio_value(value, default_ratio=DEFAULT_LORA_RATIO):
     try:
-        if _has_compact_lora_spec_hint(ratio_text):
-            if not is_compact_lora_spec_text(ratio_text):
-                raise ValueError("Invalid compact LoRA ratio format.")
-            model_names, ratio_list = normalize_lora_models_and_ratios(ratio_text)
-        else:
-            if not selected_models:
-                return None, None, "At least one LoRA model is required."
-            model_names, ratio_list = normalize_lora_models_and_ratios(
-                selected_models,
-                ratio_text,
-            )
-    except ValueError:
-        return (
-            None,
-            None,
-            "Invalid format. Use '0.5, 1.0' or 'lora_a.safetensors:0.5, lora_b.safetensors:1.0'.",
+        return float(value)
+    except (TypeError, ValueError):
+        return default_ratio
+
+
+def _sync_lora_ratio_map(
+    selected_models,
+    ratio_map,
+    *,
+    default_ratio=DEFAULT_LORA_RATIO,
+):
+    normalized_models = _normalize_selected_lora_models(selected_models)
+    current_ratio_map = dict(ratio_map or {})
+    return {
+        model_name: _coerce_lora_ratio_value(
+            current_ratio_map.get(model_name, default_ratio),
+            default_ratio,
         )
+        for model_name in normalized_models
+    }
+
+
+def _update_lora_ratio_value(value, ratio_map, model_name):
+    updated_ratio_map = dict(ratio_map or {})
+    updated_ratio_map[model_name] = _coerce_lora_ratio_value(value)
+    return updated_ratio_map
+
+
+def _parse_compact_lora_ratio_text(ratio_text):
+    try:
+        if not is_compact_lora_spec_text(ratio_text):
+            raise ValueError("Invalid compact LoRA ratio format.")
+        model_names, ratio_list = normalize_lora_models_and_ratios(ratio_text)
+    except ValueError:
+        return None, None, INVALID_RATIO_FORMAT_MESSAGE
 
     if not model_names:
-        return None, None, "At least one LoRA model is required."
+        return None, None, REQUIRED_LORA_MODELS_MESSAGE
 
-    return [get_model_path(model_name) for model_name in model_names], ratio_list, None
+    return model_names, dict(zip(model_names, ratio_list)), None
+
+
+def _import_compact_lora_ratio_text(ratio_text, current_models, current_ratio_map):
+    model_names, ratio_map, error = _parse_compact_lora_ratio_text(ratio_text)
+    if error:
+        return (
+            _normalize_selected_lora_models(current_models),
+            dict(current_ratio_map or {}),
+            error,
+        )
+
+    return model_names, ratio_map, f"Imported {len(model_names)} LoRA ratio(s)."
+
+
+def _resolve_lora_models_and_ratios(selected_models, ratio_map):
+    model_names = _normalize_selected_lora_models(selected_models)
+    if not model_names:
+        return None, None, REQUIRED_LORA_MODELS_MESSAGE
+
+    synced_ratio_map = _sync_lora_ratio_map(model_names, ratio_map)
+    return (
+        [get_model_path(model_name) for model_name in model_names],
+        [synced_ratio_map[model_name] for model_name in model_names],
+        None,
+    )
+
+
+def _render_lora_ratio_selector(key_prefix):
+    models = gr.Dropdown(
+        label="LoRA Models",
+        choices=get_model_list(),
+        multiselect=True,
+    )
+    ratio_state = gr.State({})
+
+    models.change(
+        _sync_lora_ratio_map,
+        inputs=[models, ratio_state],
+        outputs=[ratio_state],
+        queue=False,
+    )
+
+    @gr.render(inputs=[models, ratio_state], queue=False, show_progress="hidden")
+    def render_ratio_inputs(selected_models, current_ratio_map):
+        synced_ratio_map = _sync_lora_ratio_map(selected_models, current_ratio_map)
+
+        if not synced_ratio_map:
+            gr.Markdown("Select one or more LoRA models to edit ratios.")
+            return
+
+        gr.Markdown("### LoRA Ratios")
+        for model_name, ratio_value in synced_ratio_map.items():
+            model_key = gr.State(model_name)
+            ratio_input = gr.Number(
+                label=model_name,
+                value=ratio_value,
+                step=0.01,
+                key=(key_prefix, model_name),
+            )
+            ratio_input.change(
+                _update_lora_ratio_value,
+                inputs=[ratio_input, ratio_state, model_key],
+                outputs=[ratio_state],
+                queue=False,
+            )
+
+    with gr.Accordion("Advanced Ratio Import", open=False):
+        compact_ratio_text = gr.Textbox(
+            label="Compact LoRA:ratio list",
+            placeholder="style_a.safetensors:0.4, style_b.safetensors:0.9",
+        )
+        import_ratios_btn = gr.Button("Import Compact Spec")
+        import_status = gr.Textbox(label="Import Status", value="", interactive=False)
+        import_ratios_btn.click(
+            _import_compact_lora_ratio_text,
+            inputs=[compact_ratio_text, models, ratio_state],
+            outputs=[models, ratio_state, import_status],
+            queue=False,
+        )
+
+    return models, ratio_state
 
 
 def render_lora_ops_tab():
@@ -151,16 +265,7 @@ def render_lora_ops_tab():
             gr.Markdown("### Merge Multiple LoRAs")
             with gr.Row():
                 with gr.Column(scale=1):
-                    models = gr.Dropdown(
-                        label="LoRA Models",
-                        choices=get_model_list(),
-                        multiselect=True,
-                    )
-                    ratios = gr.Textbox(
-                        label="Ratios or LoRA:ratio list",
-                        value="1.0, 1.0",
-                        placeholder="1.0, 0.5 or style_a.safetensors:0.4, style_b.safetensors:0.9",
-                    )
+                    models, merge_ratio_state = _render_lora_ratio_selector("merge")
                     strategy = gr.Dropdown(
                         label="Merge Strategy",
                         choices=[
@@ -204,8 +309,22 @@ def render_lora_ops_tab():
             merge_btn = gr.Button("Merge LoRAs", variant="primary")
             merge_log = gr.Textbox(label="Merge Log")
 
-            def run_merge(mods, rats, strat, out, prec, s_prec, conc, shuf, sdxl, v2):
-                model_paths, ratio_list, error = _parse_lora_models_and_ratios(mods, rats)
+            def run_merge(
+                mods,
+                ratio_map,
+                strat,
+                out,
+                prec,
+                s_prec,
+                conc,
+                shuf,
+                sdxl,
+                v2,
+            ):
+                model_paths, ratio_list, error = _resolve_lora_models_and_ratios(
+                    mods,
+                    ratio_map,
+                )
                 if error:
                     return error
 
@@ -235,7 +354,7 @@ def render_lora_ops_tab():
                 run_merge,
                 inputs=[
                     models,
-                    ratios,
+                    merge_ratio_state,
                     strategy,
                     merge_output,
                     precision,
@@ -256,15 +375,8 @@ def render_lora_ops_tab():
                         label="Base Checkpoint",
                         choices=get_model_list(),
                     )
-                    checkpoint_loras = gr.Dropdown(
-                        label="LoRA Models",
-                        choices=get_model_list(),
-                        multiselect=True,
-                    )
-                    checkpoint_ratios = gr.Textbox(
-                        label="Ratios or LoRA:ratio list",
-                        value="1.0",
-                        placeholder="1.0, 0.5 or style_a.safetensors:0.4, style_b.safetensors:0.9",
+                    checkpoint_loras, checkpoint_ratio_state = _render_lora_ratio_selector(
+                        "apply"
                     )
                     checkpoint_output = gr.Textbox(
                         label="Output Filename",
@@ -290,10 +402,13 @@ def render_lora_ops_tab():
             apply_btn = gr.Button("Merge LoRA into Model", variant="primary")
             apply_log = gr.Textbox(label="Apply Log")
 
-            def run_apply(base, mods, rats, out, prec, s_prec, sdxl, v2):
+            def run_apply(base, mods, ratio_map, out, prec, s_prec, sdxl, v2):
                 if not base:
                     return "Base checkpoint is required."
-                model_paths, ratio_list, error = _parse_lora_models_and_ratios(mods, rats)
+                model_paths, ratio_list, error = _resolve_lora_models_and_ratios(
+                    mods,
+                    ratio_map,
+                )
                 if error:
                     return error
 
@@ -322,7 +437,7 @@ def render_lora_ops_tab():
                 inputs=[
                     base_checkpoint,
                     checkpoint_loras,
-                    checkpoint_ratios,
+                    checkpoint_ratio_state,
                     checkpoint_output,
                     checkpoint_precision,
                     checkpoint_save_precision,

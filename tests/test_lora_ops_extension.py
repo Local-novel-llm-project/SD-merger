@@ -115,20 +115,76 @@ def test_ensure_kohya_import_aliases_registers_vendor_namespace_packages():
 
 
 def test_load_kohya_symbol_imports_local_vendor_module(monkeypatch):
-    fake_module = types.SimpleNamespace(svd="callable")
-    calls = {}
+    fake_symbol_module = types.SimpleNamespace(svd="callable")
+    fake_train_util = types.SimpleNamespace(
+        load_metadata_from_safetensors=lambda _: {},
+        build_minimum_network_metadata=lambda *args: {},
+        SS_METADATA_KEY_V2="ss_v2",
+        SS_METADATA_KEY_BASE_MODEL_VERSION="ss_base_model_version",
+    )
+    fake_sai_model_spec = types.SimpleNamespace(
+        load_metadata_from_safetensors=lambda _: {},
+    )
+    calls = []
 
     def fake_import_module(name, package=None):
-        calls["name"] = name
-        calls["package"] = package
-        return fake_module
+        calls.append((name, package))
+        if name in {
+            "scripts.kohyas.train_util",
+            "library.train_util",
+            "extensions.lora_ops.kohyas.train_util",
+        }:
+            return fake_train_util
+        if name in {
+            "scripts.kohyas.sai_model_spec",
+            "library.sai_model_spec",
+            "extensions.lora_ops.kohyas.sai_model_spec",
+        }:
+            return fake_sai_model_spec
+        return fake_symbol_module
 
     monkeypatch.setattr(lora_ops.importlib, "import_module", fake_import_module)
 
     symbol = lora_ops._load_kohya_symbol("extract_lora_from_models", "svd")
 
     assert symbol == "callable"
-    assert calls == {
-        "name": ".kohyas.extract_lora_from_models",
-        "package": "extensions.lora_ops",
+    assert calls[-1] == (
+        ".kohyas.extract_lora_from_models",
+        "extensions.lora_ops",
+    )
+
+
+def test_ensure_kohya_train_util_compat_adds_missing_metadata_helpers():
+    def fake_load_metadata(path):
+        return {"loaded_from": path}
+
+    train_util_module = types.SimpleNamespace()
+    sai_model_spec_module = types.SimpleNamespace(
+        load_metadata_from_safetensors=fake_load_metadata
+    )
+
+    lora_ops._ensure_kohya_train_util_compat(
+        train_util_module,
+        sai_model_spec_module,
+    )
+
+    assert train_util_module.load_metadata_from_safetensors is fake_load_metadata
+    assert train_util_module.SS_METADATA_KEY_V2 == "ss_v2"
+    assert train_util_module.SS_METADATA_KEY_BASE_MODEL_VERSION == (
+        "ss_base_model_version"
+    )
+    assert train_util_module.build_minimum_network_metadata(
+        True,
+        "sdxl",
+        "networks.lora",
+        "128",
+        "128",
+        {"conv_dim": 16},
+    ) == {
+        "ss_v2": "True",
+        "ss_base_model_version": "sdxl",
+        "ss_network_module": "networks.lora",
+        "ss_network_dim": "128",
+        "ss_network_alpha": "128",
+        "ss_network_args": '{"conv_dim": 16}',
     }
