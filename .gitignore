@@ -177,3 +177,5 @@ cosine_test.yaml
 queue.json
 .cocoindex_code/ 
 .kiro
+module/__pycache__/calc_target.cpython-311.pyc
+module/__pycache__/const.cpython-311.pyc
