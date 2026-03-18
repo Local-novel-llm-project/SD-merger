@@ -9,7 +9,7 @@ from collections.abc import Mapping
 
 
 class SDKeyWrapper(dict, Mapping):
-    """SD モデルの state_dict をラップし、キー名の変換を行うクラス。
+    """SD モデルの state_dict をラップし、キー名の変換と設定ファイルの保持を行うクラス。
 
     SD 1.x 系の `cond_stage_model.` プレフィックスと
     SDXL 系の `conditioner.embedders.0.` プレフィックスの相互変換を行う。
@@ -17,13 +17,20 @@ class SDKeyWrapper(dict, Mapping):
     Args:
         d: モデルの state_dict。
         use_sdxl_keys: SDXL 形式のキーを使用するかどうか。
+        config: モデルの `config.json` の内容。
     """
 
     _SD1X_PREFIX = "cond_stage_model."
     _SDXL_PREFIX = "conditioner.embedders.0."
 
-    def __init__(self, d: Mapping[str, Any], use_sdxl_keys: bool = True):
+    def __init__(
+        self,
+        d: Mapping[str, Any],
+        use_sdxl_keys: bool = True,
+        config: Dict[str, Any] | None = None,
+    ):
         self._d = d
+        self.config = config
         self.is_xl = any(k.startswith(self._SDXL_PREFIX) for k in d.keys())
         self.use_sdxl_keys = use_sdxl_keys
 

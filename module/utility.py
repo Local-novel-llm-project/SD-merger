@@ -146,6 +146,7 @@ def load_model(
     model_path: str, use_sdxl_keys: bool | None = None, lazy_load: bool = True
 ) -> SDKeyWrapper:
     """safetensors 形式のモデルを読み込み、SDKeyWrapper でラップして返す。
+    モデルと同じディレクトリにある `config.json` も読み込む。
 
     Args:
         model_path: モデルファイルのパス、または分割モデルの index.json のパス、もしくはそれを含むディレクトリ。
@@ -162,16 +163,36 @@ def load_model(
     try:
         console.log(f"[bold green]モデルを読み込んでいます: {model_path}[/bold green]")
 
+        # モデルパスと config.json の探索
+        resolved_path = model_path
+        config_path = None
+        if os.path.isdir(model_path):
+            # ディレクトリの場合、index.json を探す
+            potential_index = os.path.join(model_path, "model.safetensors.index.json")
+            if os.path.exists(potential_index):
+                resolved_path = potential_index
+            config_path = os.path.join(model_path, "config.json")
+        elif os.path.isfile(model_path):
+            # ファイルの場合、同じディレクトリの config.json を探す
+            config_path = os.path.join(os.path.dirname(model_path), "config.json")
+
+        config = None
+        if config_path and os.path.exists(config_path):
+            console.log(f"[bold green]設定ファイルを読み込んでいます: {config_path}[/bold green]")
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
         # 分割モデル (Sharded Model) かどうかの判定
         is_sharded = False
-        index_path = model_path
-        if os.path.isdir(model_path):
-            potential_index = os.path.join(model_path, "model.safetensors.index.json")
+        if os.path.isdir(resolved_path):
+            # 再度チェック (ディレクトリが直接渡された場合)
+            potential_index = os.path.join(resolved_path, "model.safetensors.index.json")
             if os.path.exists(potential_index):
                 is_sharded = True
                 index_path = potential_index
-        elif model_path.endswith(".json"):
+        elif resolved_path.endswith(".json"):
             is_sharded = True
+            index_path = resolved_path
 
         if is_sharded:
             if lazy_load:
@@ -188,17 +209,19 @@ def load_model(
                     file_tensors = load_file(file_path, device="cpu")
                     raw.update(file_tensors)
         else:
-            model_path = _normalize_model_path(model_path)
+            model_file_path = _normalize_model_path(resolved_path)
             # safetensors ではない場合は mmap を有効にして torch.load
-            if not model_path.endswith(".safetensors"):
-                raw = torch.load(model_path, map_location="cpu", mmap=lazy_load, weights_only=True)
+            if not model_file_path.endswith(".safetensors"):
+                raw = torch.load(
+                    model_file_path, map_location="cpu", mmap=lazy_load, weights_only=True
+                )
                 if "state_dict" in raw:
                     raw = raw["state_dict"]
             else:
                 if lazy_load:
-                    raw = LazySafetensorsDict(model_path)
+                    raw = LazySafetensorsDict(model_file_path)
                 else:
-                    raw = load_file(model_path, device="cpu")
+                    raw = load_file(model_file_path, device="cpu")
 
         # use_sdxl_keys が未指定の場合、モデル自体の形式から自動判定
         if use_sdxl_keys is None:
@@ -207,7 +230,7 @@ def load_model(
         else:
             effective_use_sdxl = use_sdxl_keys
 
-        return SDKeyWrapper(raw, effective_use_sdxl)
+        return SDKeyWrapper(raw, effective_use_sdxl, config=config)
     except Exception as e:
         logging.error(f"{model_path} からモデルの読み込みに失敗しました: {e}")
         raise
