@@ -100,9 +100,10 @@ def _build_initial_recipe(config: dict):
     target_model_path = config.get("target_model")
     if not target_model_path:
         return None, None
-    
+
     lazy_load = config.get("lazy_load", True)
     from module.utility import load_model
+
     model_dict = load_model(target_model_path, lazy_load=lazy_load)._d
     return sd_mecha.model(model_dict), target_model_path
 
@@ -176,17 +177,26 @@ def _resolve_output_path(
     target_model_path: str | None,
 ) -> tuple[bool, str]:
     save_model = config.get("save_model", True)
-    if save_model:
-        output_filename = _resolve_output_filename(config, models, target_model_path)
+    if not save_model:
+        import tempfile
+
+        fd, output_path = tempfile.mkstemp(suffix=".safetensors", prefix="sd_merge_tmp_")
+        os.close(fd)
+        return False, output_path
+
+    output_filename = _resolve_output_filename(config, models, target_model_path)
+    sharded_output = config.get("sharded_output", False)
+
+    if sharded_output:
+        # For sharded output, the "path" is a directory.
+        output_path = os.path.join(default_output_dir, os.path.splitext(output_filename)[0])
+        os.makedirs(output_path, exist_ok=True)
+    else:
+        # For single file output, the path includes the filename.
         output_path = os.path.join(default_output_dir, output_filename)
         os.makedirs(default_output_dir, exist_ok=True)
-        return True, output_path
 
-    import tempfile
-
-    fd, output_path = tempfile.mkstemp(suffix=".safetensors", prefix="sd_merge_tmp_")
-    os.close(fd)
-    return False, output_path
+    return True, output_path
 
 
 def _build_clip_overrides_from_args(args: argparse.Namespace) -> dict[str, float]:
@@ -235,7 +245,9 @@ def _add_merge_arguments(parser: argparse.ArgumentParser) -> None:
         "-o", "--output", type=str, default="./merged", help="出力ディレクトリのパス"
     )
     parser.add_argument(
-        "--no-lazy", action="store_true", help="Lazy Load (遅延読み込み) を無効にし、全モデルをメモリに読み込む"
+        "--no-lazy",
+        action="store_true",
+        help="Lazy Load (遅延読み込み) を無効にし、全モデルをメモリに読み込む",
     )
 
 
@@ -429,6 +441,7 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
     for model_config in models:
         lazy_load = config.get("lazy_load", True)
         from module.utility import load_model
+
         left_dict = load_model(model_config["left"], lazy_load=lazy_load)._d
         right_dict = load_model(model_config["right"], lazy_load=lazy_load)._d
         left_node = sd_mecha.model(left_dict)
@@ -525,16 +538,42 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
 
     recipe = run_pre_merge_hooks(config, recipe)
 
-    logger.info(f"マージ処理を実行し、{output_path} に保存します...")
-    logger.info("sd-mecha がストリーミング処理を開始します。")
     sd_mecha.set_log_level(_get_sd_mecha_merge_log_level())
-    try:
-        sd_mecha.merge(recipe, output=output_path)
-    except Exception as e:
-        logger.error(f"sd-mecha merging error: {e}")
-        from module.exceptions import MergeError
 
-        raise MergeError("Merge failed during sd_mecha processing", original_error=e)
+    sharded_output = config.get("sharded_output", False)
+    if sharded_output:
+        logger.info(f"マージ処理を実行し、{output_path} に sharded 形式で保存します...")
+        logger.info("sd-mecha がインメモリマージを開始します。")
+        try:
+            # The output=None tells sd-mecha to return the merged state_dict in memory
+            state_dict = sd_mecha.merge(recipe, output=None)
+        except Exception as e:
+            logger.error(f"sd-mecha merging error: {e}")
+            from module.exceptions import MergeError
+
+            raise MergeError("Merge failed during sd_mecha processing", original_error=e)
+
+        logger.info("インメモリマージが完了しました。")
+        logger.info("sharded 形式での保存を開始します。")
+
+        from huggingface_hub.serialization._torch import save_torch_state_dict
+
+        save_torch_state_dict(
+            state_dict,
+            save_directory=output_path,
+            max_shard_size=config.get("max_shard_size", "5GB"),
+        )
+
+    else:
+        logger.info(f"マージ処理を実行し、{output_path} に保存します...")
+        logger.info("sd-mecha がストリーミング処理を開始します。")
+        try:
+            sd_mecha.merge(recipe, output=output_path)
+        except Exception as e:
+            logger.error(f"sd-mecha merging error: {e}")
+            from module.exceptions import MergeError
+
+            raise MergeError("Merge failed during sd_mecha processing", original_error=e)
 
     logger.info("マージが完了しました。")
 

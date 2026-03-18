@@ -63,6 +63,8 @@ class MergeConfig(BaseModel):
     output_dir: str = "output"
     output_name: Optional[str] = None
     save_model: bool = True
+    sharded_output: bool = False
+    max_shard_size: str = "5GB"
     device: str = "cpu"
     dtype: str = "float16"
     lazy_load: bool = True
