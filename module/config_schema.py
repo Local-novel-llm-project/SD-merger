@@ -20,7 +20,7 @@ class ModelConfig(BaseModel):
     )
     beta: float = Field(default=0.5, ge=0.0, le=1.0)
     strategy: str = "addition"
-    target_strategy: Optional[str] = None
+    target_strategy: Optional[str] = "addition"
     normalization_strategy: str = "none"
     left_right_velocity: float = 1.0
     replace_with: Optional[str] = None

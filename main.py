@@ -3,6 +3,7 @@ import sys
 import json
 import logging
 import argparse
+from typing import Sequence
 
 import torch
 import sd_mecha
@@ -17,6 +18,12 @@ from module.calc_method import get_calculation_strategy
 from module.calc_target import (
     get_normalization_calculation_strategy,
     get_target_calculation_strategy,
+)
+from module.arthemy_tuner_config import (
+    ARTHEMY_TUNER_MODES,
+    CLIP_FIELD_SPECS,
+    UNET_SECTION_SPECS,
+    build_arthemy_tune_job_config,
 )
 from module.utility import generate_filename, load_yaml_config
 from module.extension_manager import (
@@ -38,14 +45,361 @@ def scale_tensor(
     return a * scale
 
 
+def _iter_unet_field_specs():
+    for section in UNET_SECTION_SPECS:
+        for field in section["fields"]:
+            yield field
+
+
+def _field_name_to_option(name: str) -> str:
+    return "--" + name.lower().replace("_", "-")
+
+
+def _configure_debug_mode(debug_enabled: bool) -> None:
+    if not debug_enabled:
+        return
+    logger.setLevel(logging.DEBUG)
+    sd_mecha.set_log_level(logging.DEBUG)
+
+
+def _ensure_extensions_loaded() -> None:
+    load_extensions()
+
+
+def _get_sd_mecha_merge_log_level() -> int:
+    if logger.isEnabledFor(logging.DEBUG):
+        return logging.DEBUG
+    return logging.INFO
+
+
+def _add_debug_argument(
+    parser: argparse.ArgumentParser, *, default: object = False
+) -> None:
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        default=default,
+        help="DEBUGログレベルを有効にする",
+    )
+
+
+def _build_initial_recipe(config: dict):
+    target_model_path = config.get("target_model")
+    if not target_model_path:
+        return None, None
+    return sd_mecha.model(target_model_path), target_model_path
+
+
+def _validate_merge_inputs(models: list[dict], recipe) -> None:
+    if models:
+        return
+    if recipe is not None:
+        logger.info(
+            "models が未指定のため、target_model に対して pre-merge 拡張のみを適用します。"
+        )
+        return
+
+    logger.error("設定ファイルにモデルが指定されていません。")
+    raise ConfigError("設定ファイルにモデルが指定されていません。")
+
+
+def _resolve_model_strategy_name(
+    model_config: dict,
+    key: str,
+    default: str,
+) -> str:
+    value = model_config.get(key)
+    if value is None:
+        return default
+    return str(value)
+
+
+def _ensure_mapping_config(raw_config: object) -> dict:
+    if isinstance(raw_config, dict):
+        return raw_config
+    raise ConfigError("設定ファイルの最上位はマッピング形式である必要があります。")
+
+
+def _resolve_effective_output_dir(
+    config: dict,
+    default_output_dir: str,
+    *,
+    explicit_output_dir: bool,
+    validated_default_output_dir: str,
+) -> str:
+    configured_output_dir = config.get("output_dir")
+    if explicit_output_dir:
+        return str(configured_output_dir or default_output_dir)
+    if configured_output_dir and configured_output_dir != validated_default_output_dir:
+        return str(configured_output_dir)
+    return default_output_dir
+
+
+def _resolve_output_filename(
+    config: dict, models: list[dict], target_model_path: str | None
+) -> str:
+    output_filename = config.get("output_name")
+    if output_filename:
+        return output_filename
+
+    if models:
+        first_left_name = os.path.basename(models[0]["left"])
+        last_right_name = os.path.basename(models[-1]["right"])
+        return generate_filename(first_left_name, last_right_name)
+
+    if target_model_path:
+        target_name = os.path.splitext(os.path.basename(target_model_path))[0]
+        return generate_filename(target_name, "tuned")
+
+    raise ConfigError("出力ファイル名を決定できませんでした。")
+
+
+def _resolve_output_path(
+    config: dict,
+    default_output_dir: str,
+    models: list[dict],
+    target_model_path: str | None,
+) -> tuple[bool, str]:
+    save_model = config.get("save_model", True)
+    if save_model:
+        output_filename = _resolve_output_filename(config, models, target_model_path)
+        output_path = os.path.join(default_output_dir, output_filename)
+        os.makedirs(default_output_dir, exist_ok=True)
+        return True, output_path
+
+    import tempfile
+
+    fd, output_path = tempfile.mkstemp(suffix=".safetensors", prefix="sd_merge_tmp_")
+    os.close(fd)
+    return False, output_path
+
+
+def _build_clip_overrides_from_args(args: argparse.Namespace) -> dict[str, float]:
+    overrides = {}
+    for spec in CLIP_FIELD_SPECS:
+        attr_name = "clip_base_scale" if spec["name"] == "base_scale" else spec["name"]
+        value = getattr(args, attr_name, None)
+        if value is not None:
+            overrides[spec["name"]] = value
+    return overrides
+
+
+def _build_unet_overrides_from_args(args: argparse.Namespace) -> dict[str, object]:
+    overrides: dict[str, object] = {}
+    if getattr(args, "unet_base_scale", None) is not None:
+        overrides["base_scale"] = args.unet_base_scale
+
+    for spec in _iter_unet_field_specs():
+        value = getattr(args, spec["name"], None)
+        if value is not None:
+            overrides[spec["name"]] = value
+
+    vectors_override = getattr(args, "vectors_override", None)
+    if vectors_override:
+        overrides["vectors_override"] = vectors_override
+
+    return overrides
+
+
+def _build_tune_config_from_args(args: argparse.Namespace) -> dict:
+    return build_arthemy_tune_job_config(
+        target_model=args.model,
+        mode=args.mode,
+        clip_overrides=_build_clip_overrides_from_args(args),
+        unet_overrides=_build_unet_overrides_from_args(args),
+        output_name=args.output_name,
+        save_model=not getattr(args, "no_save", False),
+    )
+
+
+def _add_merge_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "-c", "--config", type=str, default="sd_config.yaml", help="設定ファイルのパス"
+    )
+    parser.add_argument(
+        "-o", "--output", type=str, default="./merged", help="出力ディレクトリのパス"
+    )
+
+
+def _add_tune_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "-m",
+        "--model",
+        required=True,
+        help="チューニング対象のモデルファイルパス。",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default="./merged",
+        help="出力ディレクトリのパス",
+    )
+    parser.add_argument(
+        "--output-name",
+        type=str,
+        default=None,
+        help="出力ファイル名。未指定時は自動生成。",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=ARTHEMY_TUNER_MODES,
+        default="Soft Value",
+        help="Arthemy Tuner の重み付けモード。",
+    )
+    parser.add_argument(
+        "--clip-base-scale",
+        dest="clip_base_scale",
+        type=float,
+        default=None,
+        help="CLIP 全体へ適用する基本倍率。",
+    )
+    parser.add_argument(
+        "--unet-base-scale",
+        dest="unet_base_scale",
+        type=float,
+        default=None,
+        help="UNet 全体へ適用する基本倍率。",
+    )
+    parser.add_argument(
+        "--vectors-override",
+        type=str,
+        default=None,
+        help="UNet 19ブロックを直接指定するカンマ区切り文字列。",
+    )
+    parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="保存せず一時ファイルへ出力する。",
+    )
+
+    for spec in CLIP_FIELD_SPECS:
+        if spec["name"] == "base_scale":
+            continue
+        parser.add_argument(
+            _field_name_to_option(spec["name"]),
+            dest=spec["name"],
+            type=float,
+            default=None,
+            help=spec["description"],
+        )
+
+    for spec in _iter_unet_field_specs():
+        parser.add_argument(
+            _field_name_to_option(spec["name"]),
+            dest=spec["name"],
+            type=float,
+            default=None,
+            help=spec["description"],
+        )
+
+
+def _add_ui_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--host", default="0.0.0.0", help="UI の bind host")
+    parser.add_argument("--port", type=int, default=7860, help="UI の listen port")
+    parser.add_argument("--share", action="store_true", help="Gradio share を有効化")
+
+
+def _create_legacy_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="モデルの差分計算とマージツール (sd-mecha版)"
+    )
+    _add_merge_arguments(parser)
+    _add_debug_argument(parser)
+    return parser
+
+
+def _create_subcommand_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="モデルの差分計算とマージツール (sd-mecha版)"
+    )
+    _add_debug_argument(parser)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    merge_parser = subparsers.add_parser("merge", help="YAML 設定ファイルでマージを実行")
+    _add_merge_arguments(merge_parser)
+    _add_debug_argument(merge_parser, default=argparse.SUPPRESS)
+
+    tune_parser = subparsers.add_parser("tune", help="Arthemy Tuner を単一モデルへ適用")
+    _add_tune_arguments(tune_parser)
+    _add_debug_argument(tune_parser, default=argparse.SUPPRESS)
+
+    ui_parser = subparsers.add_parser("ui", help="Gradio UI を起動")
+    _add_ui_arguments(ui_parser)
+    _add_debug_argument(ui_parser, default=argparse.SUPPRESS)
+
+    return parser
+
+
+def _find_subcommand(argv: Sequence[str]) -> str | None:
+    subcommands = {"merge", "tune", "ui"}
+    for token in argv:
+        if token in {"-d", "--debug"}:
+            continue
+        if token in subcommands:
+            return token
+        return None
+    return None
+
+
+def _parse_cli_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    argv = list(argv or sys.argv[1:])
+    if _find_subcommand(argv):
+        return _create_subcommand_parser().parse_args(argv)
+
+    args = _create_legacy_parser().parse_args(argv)
+    args.command = "merge"
+    return args
+
+
+def _run_merge_command(args: argparse.Namespace) -> str | None:
+    _ensure_extensions_loaded()
+    return run_from_config_file(args.config, args.output)
+
+
+def _run_tune_command(args: argparse.Namespace) -> str | None:
+    _ensure_extensions_loaded()
+    config = _build_tune_config_from_args(args)
+    output_path = run_merge_pipeline(config, default_output_dir=args.output)
+    if output_path:
+        logger.info(f"Arthemy Tuner output saved to {output_path}")
+    return output_path
+
+
+def _run_ui_command(args: argparse.Namespace) -> int:
+    from ui.app import launch_ui
+
+    _ensure_extensions_loaded()
+    launch_ui(server_name=args.host, server_port=args.port, share=args.share)
+    return 0
+
+
+def _dispatch_cli_command(args: argparse.Namespace) -> int:
+    _configure_debug_mode(bool(getattr(args, "debug", False)))
+
+    if args.command == "merge":
+        _run_merge_command(args)
+        return 0
+    if args.command == "tune":
+        _run_tune_command(args)
+        return 0
+    if args.command == "ui":
+        return _run_ui_command(args)
+
+    raise ConfigError(f"未知のコマンドです: {args.command}")
+
+
 def run_merge_pipeline(
     raw_config: dict, default_output_dir: str = "./merged"
 ) -> str | None:
     """設定辞書を受け取り、マージ処理を実行する。
     戻り値: マージされたモデルのファイルパス。save_model が False の場合は一時ファイルのパス。
     """
+    normalized_raw_config = _ensure_mapping_config(raw_config)
+
     try:
-        validated_config = MergeConfig(**raw_config)
+        validated_config = MergeConfig(**normalized_raw_config)
         config = run_pre_config_hooks(validated_config.model_dump())
     except ValidationError as e:
         logger.error(f"コンフィグのバリデーションエラー: {e}")
@@ -54,27 +408,32 @@ def run_merge_pipeline(
     if config.get("_skip_merge"):
         return config.get("_skip_merge_output")
 
-    target_model_path = config.get("target_model")
-    if target_model_path:
-        recipe = sd_mecha.model(target_model_path)
-    else:
-        recipe = None
-
+    recipe, target_model_path = _build_initial_recipe(config)
     models = config.get("models", [])
-    if not models:
-        logger.error("設定ファイルにモデルが指定されていません。")
-        return None
+    _validate_merge_inputs(models, recipe)
 
     for model_config in models:
         left_node = sd_mecha.model(model_config["left"])
         right_node = sd_mecha.model(model_config["right"])
         target_velocity = model_config.get("velocity", 1.0)
         left_right_velocity = model_config.get("left_right_velocity", 1.0)
-        strategy_name = model_config.get("strategy", "addition")
+        strategy_name = _resolve_model_strategy_name(
+            model_config,
+            "strategy",
+            "addition",
+        )
         key_patterns = model_config.get("key_patterns", None)
         replace_with = model_config.get("replace_with", None)
-        target_strategy_name = model_config.get("target_strategy", "addition")
-        normalization_strategy_name = model_config.get("normalization_strategy", "none")
+        target_strategy_name = _resolve_model_strategy_name(
+            model_config,
+            "target_strategy",
+            "addition",
+        )
+        normalization_strategy_name = _resolve_model_strategy_name(
+            model_config,
+            "normalization_strategy",
+            "none",
+        )
 
         if not key_patterns:
             if recipe is None:
@@ -137,29 +496,22 @@ def run_merge_pipeline(
         else:
             recipe = scale_tensor(diff_node, scale=target_velocity)
 
-    save_model = config.get("save_model", True)
+    effective_output_dir = _resolve_effective_output_dir(
+        config,
+        default_output_dir,
+        explicit_output_dir="output_dir" in normalized_raw_config,
+        validated_default_output_dir=validated_config.output_dir,
+    )
 
-    if save_model:
-        output_filename = config.get("output_name")
-        if not output_filename:
-            first_left_name = os.path.basename(models[0]["left"])
-            last_right_name = os.path.basename(models[-1]["right"])
-            output_filename = generate_filename(first_left_name, last_right_name)
-        output_path = os.path.join(default_output_dir, output_filename)
-        os.makedirs(default_output_dir, exist_ok=True)
-    else:
-        import tempfile
-
-        fd, output_path = tempfile.mkstemp(
-            suffix=".safetensors", prefix="sd_merge_tmp_"
-        )
-        os.close(fd)
+    save_model, output_path = _resolve_output_path(
+        config, effective_output_dir, models, target_model_path
+    )
 
     recipe = run_pre_merge_hooks(config, recipe)
 
     logger.info(f"マージ処理を実行し、{output_path} に保存します...")
     logger.info("sd-mecha がストリーミング処理を開始します。")
-    sd_mecha.set_log_level(logging.INFO)
+    sd_mecha.set_log_level(_get_sd_mecha_merge_log_level())
     try:
         sd_mecha.merge(recipe, output=output_path)
     except Exception as e:
@@ -176,7 +528,7 @@ def run_merge_pipeline(
     return output_path
 
 
-def main(config_path: str, output_dir: str) -> None:
+def run_from_config_file(config_path: str, output_dir: str) -> str | None:
     """メイン処理。設定ファイルに従いモデルのマージを sd-mecha レシピとして構築して実行する。
 
     Args:
@@ -184,33 +536,21 @@ def main(config_path: str, output_dir: str) -> None:
         output_dir: 出力ディレクトリのパス。
     """
     raw_config = load_yaml_config(config_path)
-    run_merge_pipeline(raw_config, default_output_dir=output_dir)
+    return run_merge_pipeline(raw_config, default_output_dir=output_dir)
+
+
+def main(config_path: str, output_dir: str) -> str | None:
+    return run_from_config_file(config_path, output_dir)
+
+
+def cli_main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_cli_args(argv)
+    return _dispatch_cli_command(args)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="モデルの差分計算とマージツール (sd-mecha版)"
-    )
-    parser.add_argument(
-        "-c", "--config", type=str, default="sd_config.yaml", help="設定ファイルのパス"
-    )
-    parser.add_argument(
-        "-o", "--output", type=str, default="./merged", help="出力ディレクトリのパス"
-    )
-    parser.add_argument(
-        "-d", "--debug", action="store_true", help="DEBUGログレベルを有効にする"
-    )
-    args = parser.parse_args()
-
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-        sd_mecha.set_log_level(logging.DEBUG)
-
-    # 拡張機能の読み込み
-    load_extensions()
-
     try:
-        main(args.config, args.output)
+        sys.exit(cli_main())
     except SDMergerError as e:
         logger.error(f"Application Error: {e}")
         sys.exit(1)

@@ -1,5 +1,6 @@
 import gradio as gr
 from module.presets import list_presets, load_preset, save_preset
+from module.error_messages import build_user_error_message
 
 
 def render_presets_tab():
@@ -29,13 +30,19 @@ def render_presets_tab():
     def on_load(name):
         if not name:
             return {}
-        return load_preset(name, category="default")
+        try:
+            return load_preset(name, category="default")
+        except Exception as e:
+            return {"error": build_user_error_message(e, action="プリセット読込")}
 
     def on_save(name, data):
         if not name:
             return "Please enter a name."
-        msg = save_preset(name, data, category="default")
-        return msg
+        try:
+            msg = save_preset(name, data, category="default")
+            return msg
+        except Exception as e:
+            return build_user_error_message(e, action="プリセット保存")
 
     refresh_btn.click(on_refresh, inputs=[], outputs=[preset_list])
     load_btn.click(on_load, inputs=[preset_list], outputs=[config_json])

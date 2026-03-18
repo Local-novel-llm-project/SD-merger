@@ -1,50 +1,180 @@
 import os
 import json
 import time
+import logging
+import threading
 import yaml
+from pathlib import Path
 from typing import List, Dict, Any
 
-HISTORY_FILE = os.path.join(os.path.dirname(__file__), "..", "merge_history.json")
+from module.persistence import move_corrupt_file_aside, write_json_file_atomic
+
+HISTORY_FILE = str(Path(__file__).resolve().parent.parent / "merge_history.json")
+_HISTORY_LOCK = threading.RLock()
+
+
+def build_history_metadata(timestamp: float | None = None) -> Dict[str, Any]:
+    resolved_timestamp = time.time() if timestamp is None else float(timestamp)
+    return {
+        "timestamp": resolved_timestamp,
+        "date": time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(resolved_timestamp)
+        ),
+    }
+
+
+def _write_history(history: List[Dict[str, Any]]) -> None:
+    write_json_file_atomic(HISTORY_FILE, history, indent=2, ensure_ascii=False)
 
 
 def load_history() -> List[Dict[str, Any]]:
-    if not os.path.exists(HISTORY_FILE):
-        return []
-    try:
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    with _HISTORY_LOCK:
+        if not os.path.exists(HISTORY_FILE):
+            return []
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, list):
+                return loaded
+            raise ValueError("History file root must be a list.")
+        except (json.JSONDecodeError, ValueError) as exc:
+            moved_path = None
+            try:
+                moved_path = move_corrupt_file_aside(HISTORY_FILE)
+            except OSError as move_exc:
+                logging.error(
+                    "History file '%s' was corrupt but could not be moved aside: %s",
+                    HISTORY_FILE,
+                    move_exc,
+                )
+            logging.error(
+                "History file was corrupt and has been moved aside to '%s': %s",
+                moved_path,
+                exc,
+            )
+            return []
+        except OSError as exc:
+            logging.error("Failed to read history file '%s': %s", HISTORY_FILE, exc)
+            return []
 
 
 def save_history(entry: Dict[str, Any]) -> None:
-    history = load_history()
-    entry["timestamp"] = time.time()
-    entry["date"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry["timestamp"]))
-    history.insert(0, entry)  # Add to beginning
-    # Keep only last 100 entries
-    history = history[:100]
+    with _HISTORY_LOCK:
+        history = load_history()
+        entry_to_save = dict(entry)
+        entry_to_save.update(build_history_metadata())
+        history.insert(0, entry_to_save)
+        history = history[:100]
+        _write_history(history)
 
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2, ensure_ascii=False)
+
+def _normalize_output_name(output_name: str) -> tuple[str, str, str, str]:
+    normalized = os.path.normcase(os.path.normpath(str(output_name or "").strip()))
+    if not normalized:
+        return "", "", "", ""
+
+    basename = os.path.basename(normalized)
+    stem, suffix = os.path.splitext(basename)
+    return normalized, basename, stem, suffix
+
+
+def _find_matching_history_indexes(
+    history: List[Dict[str, Any]],
+    output_name: str,
+    matcher,
+) -> list[int]:
+    return [
+        index
+        for index, entry in enumerate(history)
+        if matcher(output_name, entry.get("output_name", ""))
+    ]
+
+
+def _has_directory_component(normalized_path: str, basename: str) -> bool:
+    return bool(normalized_path and basename and normalized_path != basename)
+
+
+def _is_exact_path_output_name_match(candidate: str, recorded: str) -> bool:
+    candidate_path, _, _, _ = _normalize_output_name(candidate)
+    recorded_path, _, _, _ = _normalize_output_name(recorded)
+    if not candidate_path or not recorded_path:
+        return False
+    return candidate_path == recorded_path
+
+
+def _is_unique_basename_output_name_match(candidate: str, recorded: str) -> bool:
+    candidate_path, candidate_basename, _, candidate_suffix = _normalize_output_name(
+        candidate
+    )
+    recorded_path, recorded_basename, _, recorded_suffix = _normalize_output_name(
+        recorded
+    )
+    if (
+        not candidate_basename
+        or not recorded_basename
+        or candidate_basename != recorded_basename
+    ):
+        return False
+
+    if candidate_suffix and recorded_suffix and candidate_suffix != recorded_suffix:
+        return False
+
+    return _has_directory_component(candidate_path, candidate_basename) or _has_directory_component(
+        recorded_path,
+        recorded_basename,
+    )
+
+
+def _is_stem_only_output_name_match(candidate: str, recorded: str) -> bool:
+    _, _, candidate_stem, candidate_suffix = _normalize_output_name(candidate)
+    _, _, recorded_stem, recorded_suffix = _normalize_output_name(recorded)
+    if not candidate_stem or not recorded_stem or candidate_stem != recorded_stem:
+        return False
+    return not candidate_suffix or not recorded_suffix
+
+
+def _find_history_entry_index(
+    history: List[Dict[str, Any]], output_name: str
+) -> int | None:
+    path_matches = _find_matching_history_indexes(
+        history,
+        output_name,
+        _is_exact_path_output_name_match,
+    )
+    if path_matches:
+        return path_matches[0]
+
+    basename_matches = _find_matching_history_indexes(
+        history,
+        output_name,
+        _is_unique_basename_output_name_match,
+    )
+    if len(basename_matches) == 1:
+        return basename_matches[0]
+
+    stem_matches = [
+        index
+        for index, entry in enumerate(history)
+        if _is_stem_only_output_name_match(output_name, entry.get("output_name", ""))
+    ]
+    if len(stem_matches) == 1:
+        return stem_matches[0]
+
+    return None
 
 
 def update_history_entry(output_name: str, update_dict: Dict[str, Any]) -> bool:
     """特定の output_name を持つ最新のヒストリエントリを更新する"""
-    history = load_history()
-    updated = False
+    with _HISTORY_LOCK:
+        history = load_history()
+        match_index = _find_history_entry_index(history, output_name)
+        updated = match_index is not None
 
-    for entry in history:
-        if entry.get("output_name") == output_name:
-            entry.update(update_dict)
-            updated = True
-            break
+        if updated:
+            history[match_index].update(update_dict)
+            _write_history(history)
 
-    if updated:
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(history, f, indent=2, ensure_ascii=False)
-
-    return updated
+        return updated
 
 
 def history_to_yaml(entry: dict) -> str:

@@ -1,7 +1,9 @@
 import os
 import sys
 import logging
+import importlib
 from types import SimpleNamespace
+import types
 
 from module.extension_manager import register_pre_config_hook
 
@@ -17,11 +19,7 @@ def run_lora_operations(config: dict) -> dict:
 
     logging.info("LoRA関連の操作を開始します...")
 
-    # 実行パスに kohyas を追加
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    kohyas_dir = os.path.join(current_dir, "kohyas")
-    if kohyas_dir not in sys.path:
-        sys.path.insert(0, kohyas_dir)
+    _ensure_kohya_import_aliases()
 
     operations = lora_ops.get("operations", [])
     last_output_path = None
@@ -45,9 +43,47 @@ def run_lora_operations(config: dict) -> dict:
     return config
 
 
-def _run_extract_lora(op: dict):
-    from .kohyas.extract_lora_from_models import svd
+def _register_kohya_namespace(name: str, path: str) -> None:
+    module = sys.modules.get(name)
+    if module is None:
+        module = types.ModuleType(name)
+        module.__path__ = [path]
+        module.__package__ = name
+        sys.modules[name] = module
+        return
 
+    existing_paths = list(getattr(module, "__path__", []))
+    if path not in existing_paths:
+        existing_paths.append(path)
+        module.__path__ = existing_paths
+
+
+def _ensure_kohya_import_aliases() -> str:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    kohyas_dir = os.path.join(current_dir, "kohyas")
+
+    if current_dir not in sys.path:
+        sys.path.insert(0, current_dir)
+    if kohyas_dir not in sys.path:
+        sys.path.insert(0, kohyas_dir)
+
+    _register_kohya_namespace("scripts", current_dir)
+    _register_kohya_namespace("scripts.kohyas", kohyas_dir)
+    _register_kohya_namespace("library", kohyas_dir)
+    return kohyas_dir
+
+
+def _load_kohya_symbol(module_name: str, symbol_name: str):
+    _ensure_kohya_import_aliases()
+    module = importlib.import_module(
+        f".kohyas.{module_name}",
+        package=__package__,
+    )
+    return getattr(module, symbol_name)
+
+
+def _run_extract_lora(op: dict):
+    svd = _load_kohya_symbol("extract_lora_from_models", "svd")
     logging.info("LoRA抽出(Extract)を実行します...")
     args = SimpleNamespace(
         v2=op.get("v2", False),
@@ -70,13 +106,8 @@ def _run_extract_lora(op: dict):
 
 def _select_merge_runner(is_sdxl: bool):
     if is_sdxl:
-        from .kohyas.sdxl_merge_lora import merge
-
-        return merge
-
-    from .kohyas.merge_lora import merge
-
-    return merge
+        return _load_kohya_symbol("sdxl_merge_lora", "merge")
+    return _load_kohya_symbol("merge_lora", "merge")
 
 
 def _run_merge_lora(op: dict):

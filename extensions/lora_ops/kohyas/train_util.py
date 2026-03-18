@@ -21,12 +21,28 @@ from diffusers import StableDiffusionPipeline
 from scripts.kohyas.original_unet import UNet2DConditionModel
 import numpy as np
 from PIL import Image
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+try:
+    import albumentations as albu
+except ImportError:
+    albu = None
 from einops import rearrange
 from torch import einsum
 import safetensors.torch
 
 import scripts.kohyas.model_util as model_util
+
+
+def _require_optional_dependency(module, package_name: str):
+    if module is None:
+        raise ImportError(
+            f"{package_name} is required for this operation. "
+            f"Please install it and retry."
+        )
+    return module
 
 # Tokenizer: checkpointから読み込むのではなくあらかじめ提供されているものを使う
 TOKENIZER_PATH = "openai/clip-vit-large-patch14"
@@ -242,23 +258,29 @@ class BaseDataset(torch.utils.data.Dataset):
 
         # augmentation
         flip_p = 0.5 if flip_aug else 0.0
+        albu_module = None
+        if color_aug or flip_aug:
+            albu_module = _require_optional_dependency(albu, "albumentations")
         if color_aug:
             # わりと弱めの色合いaugmentation：brightness/contrastあたりは画像のpixel valueの最大値・最小値を変えてしまうのでよくないのではという想定でgamma/hueあたりを触る
-            self.aug = albu.Compose(
+            self.aug = albu_module.Compose(
                 [
-                    albu.OneOf(
+                    albu_module.OneOf(
                         [
-                            albu.HueSaturationValue(8, 0, 0, p=0.5),
-                            albu.RandomGamma((95, 105), p=0.5),
+                            albu_module.HueSaturationValue(8, 0, 0, p=0.5),
+                            albu_module.RandomGamma((95, 105), p=0.5),
                         ],
                         p=0.33,
                     ),
-                    albu.HorizontalFlip(p=flip_p),
+                    albu_module.HorizontalFlip(p=flip_p),
                 ],
                 p=1.0,
             )
         elif flip_aug:
-            self.aug = albu.Compose([albu.HorizontalFlip(p=flip_p)], p=1.0)
+            self.aug = albu_module.Compose(
+                [albu_module.HorizontalFlip(p=flip_p)],
+                p=1.0,
+            )
         else:
             self.aug = None
 
@@ -519,8 +541,9 @@ class BaseDataset(torch.utils.data.Dataset):
 
         if image_width != resized_size[0] or image_height != resized_size[1]:
             # リサイズする
-            image = cv2.resize(
-                image, resized_size, interpolation=cv2.INTER_AREA
+            cv2_module = _require_optional_dependency(cv2, "opencv-python-headless")
+            image = cv2_module.resize(
+                image, resized_size, interpolation=cv2_module.INTER_AREA
             )  # INTER_AREAでやりたいのでcv2でリサイズ
 
         image_height, image_width = image.shape[0:2]
@@ -628,7 +651,8 @@ class BaseDataset(torch.utils.data.Dataset):
         nh = int(height * scale + 0.5)
         nw = int(width * scale + 0.5)
         assert nh >= self.height and nw >= self.width, f"internal error. small scale {scale}, {width}*{height}"
-        image = cv2.resize(image, (nw, nh), interpolation=cv2.INTER_AREA)
+        cv2_module = _require_optional_dependency(cv2, "opencv-python-headless")
+        image = cv2_module.resize(image, (nw, nh), interpolation=cv2_module.INTER_AREA)
         face_cx = int(face_cx * scale + 0.5)
         face_cy = int(face_cy * scale + 0.5)
         height, width = nh, nw
@@ -1152,10 +1176,11 @@ def debug_dataset(train_dataset, show_input_ids=False):
                 im = ((im.numpy() + 1.0) * 127.5).astype(np.uint8)
                 im = np.transpose(im, (1, 2, 0))  # c,H,W -> H,W,c
                 im = im[:, :, ::-1]  # RGB -> BGR (OpenCV)
+                cv2_module = _require_optional_dependency(cv2, "opencv-python-headless")
                 if os.name == "nt":  # only windows
-                    cv2.imshow("img", im)
-                k = cv2.waitKey()
-                cv2.destroyAllWindows()
+                    cv2_module.imshow("img", im)
+                k = cv2_module.waitKey()
+                cv2_module.destroyAllWindows()
                 if k == 27:
                     break
         if k == 27 or (example["images"] is None and i >= 8):

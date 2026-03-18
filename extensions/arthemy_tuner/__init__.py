@@ -4,10 +4,13 @@ sd-mecha のレシピノードとして組み込める遅延評価 (Lazy Evaluat
 ストリーミングマージの最終段として各テンソルごとのスケール倍率計算ノードを適用します。
 """
 
-import re
 import json
+import logging
+import re
+
+from sd_mecha import Parameter, Return, merge_method
 from torch import Tensor
-from sd_mecha import merge_method, Parameter, Return
+
 from module.extension_manager import register_pre_merge_hook
 
 
@@ -44,6 +47,141 @@ GROUP_MAP_UNET = {
 _CACHE = {}
 
 
+def _get_passthrough_weight(w: float) -> float:
+    return w
+
+
+def _get_weight_transform(mode: str, for_unet: bool):
+    if mode != "Soft Value":
+        return _get_passthrough_weight
+    if for_unet:
+        return _get_target_weight_model_soft
+    return _get_target_weight_soft
+
+
+def _parse_vectors_override(raw_override):
+    if raw_override in (None, ""):
+        return None
+
+    if isinstance(raw_override, str):
+        raw_values = [item.strip() for item in raw_override.split(",") if item.strip()]
+    elif isinstance(raw_override, list):
+        raw_values = raw_override
+    else:
+        raise TypeError(
+            "vectors_override must be either a comma-separated string or a list."
+        )
+
+    parsed_values = [float(value) for value in raw_values]
+    if len(parsed_values) != 19:
+        raise ValueError(
+            f"vectors_override expects 19 values, found {len(parsed_values)}."
+        )
+    return parsed_values
+
+
+def _build_clip_data(clip_conf: dict, mode: str):
+    get_weight = _get_weight_transform(mode, for_unet=False)
+    return (
+        get_weight(clip_conf.get("base_scale", 1.0)),
+        get_weight(clip_conf.get("syntax_rigidity", 1.0)),
+        get_weight(clip_conf.get("semantic_focus", 1.0)),
+        get_weight(clip_conf.get("style_abstraction", 1.0)),
+    )
+
+
+def _build_grouped_unet_weights(config_dict: dict, get_weight) -> list[float]:
+    final_weights = [1.0] * 19
+    for group_name, indices in GROUP_MAP_UNET.items():
+        slider_value = config_dict.get(group_name, 1.0)
+        target_value = get_weight(slider_value)
+        for idx in indices:
+            if 0 <= idx < 19:
+                final_weights[idx] = target_value
+    return final_weights
+
+
+def _build_vector_override_weights(raw_override, get_weight):
+    try:
+        override_values = _parse_vectors_override(raw_override)
+    except (TypeError, ValueError) as exc:
+        logging.warning(
+            "Arthemy Tuner vectors_override is invalid; falling back to grouped sliders: %s",
+            exc,
+        )
+        return None
+
+    return [get_weight(value) for value in override_values]
+
+
+def _map_unet_weights(final_weights: list[float]) -> dict[str, float]:
+    weights_map = {}
+    for i in range(9):
+        weights_map[f"IN_{i}"] = final_weights[i]
+    weights_map["MID"] = final_weights[9]
+    for i in range(9):
+        weights_map[f"OUT_{i}"] = final_weights[10 + i]
+    return weights_map
+
+
+def _build_unet_data(unet_conf: dict, mode: str):
+    get_weight = _get_weight_transform(mode, for_unet=True)
+    config_dict = unet_conf.get("config_dict", {})
+    raw_override = unet_conf.get("vectors_override", config_dict.get("vectors_override"))
+
+    final_weights = _build_vector_override_weights(raw_override, get_weight)
+    if final_weights is None:
+        final_weights = _build_grouped_unet_weights(config_dict, get_weight)
+
+    return (
+        _map_unet_weights(final_weights),
+        get_weight(unet_conf.get("base_scale", 1.0)),
+    )
+
+
+def _build_cache_entry(mode: str, clip_config_json: str, unet_config_json: str):
+    clip_conf = json.loads(clip_config_json)
+    unet_conf = json.loads(unet_config_json)
+    clip_data = _build_clip_data(clip_conf, mode)
+    unet_data = _build_unet_data(unet_conf, mode)
+    return clip_data, unet_data, bool(clip_conf), bool(unet_conf)
+
+
+def _get_clip_target_scale(key: str, clip_data) -> float:
+    w_base_c, w_syntax, w_semantic, w_style = clip_data
+    target_scale = w_base_c
+    match = re.search(r"\.layers\.(\d+)\.", key)
+    if not match:
+        return target_scale
+
+    ratio = int(match.group(1)) / TOTAL_LAYERS_SDXL
+    if ratio <= BLOCK_BOUNDARIES_CLIP["syntax_end"]:
+        return w_syntax
+    if ratio <= BLOCK_BOUNDARIES_CLIP["semantic_end"]:
+        return w_semantic
+    return w_style
+
+
+def _get_unet_target_weight(key: str, unet_data) -> float:
+    weights_map, w_base_u = unet_data
+    target_weight = w_base_u
+
+    if "input_blocks" in key:
+        match = re.search(r"input_blocks\.(\d+)\.", key)
+        if match and int(match.group(1)) <= 8:
+            return weights_map.get(f"IN_{int(match.group(1))}", w_base_u)
+
+    if "middle_block" in key:
+        return weights_map.get("MID", w_base_u)
+
+    if "output_blocks" in key:
+        match = re.search(r"output_blocks\.(\d+)\.", key)
+        if match and int(match.group(1)) <= 8:
+            return weights_map.get(f"OUT_{int(match.group(1))}", w_base_u)
+
+    return target_weight
+
+
 @merge_method
 def arthemy_tune_node(
     tensor: Parameter(Tensor),
@@ -66,37 +204,9 @@ def arthemy_tune_node(
     # 設定のパース/前計算のキャッシュ (テンソル毎の処理負荷削減)
     cache_key = (mode, clip_config_json, unet_config_json)
     if cache_key not in _CACHE:
-        clip_conf = json.loads(clip_config_json)
-        unet_conf = json.loads(unet_config_json)
-
-        get_w_clip = _get_target_weight_soft if mode == "Soft Value" else lambda x: x
-        w_base_c = get_w_clip(clip_conf.get("base_scale", 1.0))
-        w_syntax = get_w_clip(clip_conf.get("syntax_rigidity", 1.0))
-        w_semantic = get_w_clip(clip_conf.get("semantic_focus", 1.0))
-        w_style = get_w_clip(clip_conf.get("style_abstraction", 1.0))
-        clip_data = (w_base_c, w_syntax, w_semantic, w_style)
-
-        get_w_unet = (
-            _get_target_weight_model_soft if mode == "Soft Value" else lambda x: x
+        _CACHE[cache_key] = _build_cache_entry(
+            mode, clip_config_json, unet_config_json
         )
-        final_weights = [1.0] * 19
-        c_dict = unet_conf.get("config_dict", {})
-        for group_name, indices in GROUP_MAP_UNET.items():
-            s_val = c_dict.get(group_name, 1.0)
-            r_val = get_w_unet(s_val)
-            for idx in indices:
-                if 0 <= idx < 19:
-                    final_weights[idx] = r_val
-        weights_map = {}
-        for i in range(9):
-            weights_map[f"IN_{i}"] = final_weights[i]
-        weights_map["MID"] = final_weights[9]
-        for i in range(9):
-            weights_map[f"OUT_{i}"] = final_weights[10 + i]
-        w_base_u = get_w_unet(unet_conf.get("base_scale", 1.0))
-        unet_data = (weights_map, w_base_u)
-
-        _CACHE[cache_key] = (clip_data, unet_data, bool(clip_conf), bool(unet_conf))
 
     clip_data, unet_data, has_clip, has_unet = _CACHE[cache_key]
 
@@ -105,39 +215,14 @@ def arthemy_tune_node(
         key.endswith(".position_ids") or key.endswith(".logit_scale")
     ):
         if has_clip:
-            w_base_c, w_syntax, w_semantic, w_style = clip_data
-            target_scale = w_base_c
-            match = re.search(r"\.layers\.(\d+)\.", key)
-            if match:
-                ratio = int(match.group(1)) / TOTAL_LAYERS_SDXL
-                if ratio <= BLOCK_BOUNDARIES_CLIP["syntax_end"]:
-                    target_scale = w_syntax
-                elif ratio <= BLOCK_BOUNDARIES_CLIP["semantic_end"]:
-                    target_scale = w_semantic
-                else:
-                    target_scale = w_style
+            target_scale = _get_clip_target_scale(key, clip_data)
             if target_scale != 1.0:
                 return tensor * target_scale
 
     # --- UNet Tuner Logic ---
     if "model.diffusion_model" in key:
         if has_unet:
-            weights_map, w_base_u = unet_data
-            target_weight = w_base_u
-            if "input_blocks" in key:
-                match = re.search(r"input_blocks\.(\d+)\.", key)
-                if match and int(match.group(1)) <= 8:
-                    target_weight = weights_map.get(
-                        f"IN_{int(match.group(1))}", w_base_u
-                    )
-            elif "middle_block" in key:
-                target_weight = weights_map.get("MID", w_base_u)
-            elif "output_blocks" in key:
-                match = re.search(r"output_blocks\.(\d+)\.", key)
-                if match and int(match.group(1)) <= 8:
-                    target_weight = weights_map.get(
-                        f"OUT_{int(match.group(1))}", w_base_u
-                    )
+            target_weight = _get_unet_target_weight(key, unet_data)
             if target_weight != 1.0:
                 return tensor * target_weight
 
@@ -159,13 +244,17 @@ def apply_arthemy_tuner_recipe(recipe, arthemy_config: dict):
         return recipe
 
     mode = arthemy_config.get("mode", "Soft Value")
-    clip_config = arthemy_config.get("clip", {})
-    unet_config = arthemy_config.get("unet", {})
-    # unet設定にネストされた config_dict を含める処理
-    unet_json_obj = {
-        "base_scale": unet_config.get("base_scale", 1.0),
-        "config_dict": unet_config,
-    }
+    clip_config = arthemy_config.get("clip") or {}
+    unet_config = arthemy_config.get("unet") or {}
+
+    unet_json_obj = {}
+    if unet_config:
+        unet_json_obj = {
+            "base_scale": unet_config.get("base_scale", 1.0),
+            "config_dict": unet_config,
+        }
+        if "vectors_override" in unet_config:
+            unet_json_obj["vectors_override"] = unet_config["vectors_override"]
 
     # レシピノードをラップして返す
     return arthemy_tune_node(

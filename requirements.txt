@@ -22,6 +22,8 @@ Pillow
 scipy
 tqdm
 requests
+opencv-python-headless
+albumentations
 
 # Optional
 kornia>=0.7.1

@@ -2,6 +2,8 @@ import shutil
 import uuid
 from pathlib import Path
 
+import pytest
+
 from module import presets
 
 
@@ -43,5 +45,24 @@ def test_load_preset_returns_empty_dict_for_invalid_json(monkeypatch):
 
     try:
         assert presets.load_preset("broken.json") == {}
+    finally:
+        shutil.rmtree(runtime_dir, ignore_errors=True)
+
+
+def test_preset_dir_points_to_repository_presets_directory():
+    preset_dir = Path(presets.PRESET_DIR)
+    expected_dir = Path(presets.__file__).resolve().parent.parent / "presets"
+
+    assert preset_dir.name == "presets"
+    assert preset_dir == expected_dir
+
+
+def test_save_preset_rejects_path_traversal(monkeypatch):
+    runtime_dir = _make_runtime_dir("preset_escape")
+    monkeypatch.setattr(presets, "PRESET_DIR", str(runtime_dir))
+
+    try:
+        with pytest.raises(ValueError):
+            presets.save_preset("..\\..\\outside", {"prompt": "escape"})
     finally:
         shutil.rmtree(runtime_dir, ignore_errors=True)

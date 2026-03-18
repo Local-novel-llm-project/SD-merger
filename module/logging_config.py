@@ -9,6 +9,8 @@ def setup_logger(name: Optional[str] = None, log_level: int = logging.INFO) -> l
     Uses Rich for console output if available, otherwise falls back to standard StreamHandler.
     """
     logger = logging.getLogger(name)
+    if name is not None:
+        logger.propagate = False
 
     # If the logger already has handlers, assume it's already configured to avoid duplicate logs
     if logger.handlers:

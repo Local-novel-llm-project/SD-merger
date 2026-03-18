@@ -35,7 +35,8 @@ def load_yaml_config(config_path: str) -> Dict[str, Any]:
     try:
         with open(config_path, "r", encoding="utf-8") as file:
             console.log(f"[bold green]設定ファイルを読み込んでいます: {config_path}[/bold green]")
-            return yaml.safe_load(file)
+            loaded = yaml.safe_load(file)
+            return {} if loaded is None else loaded
     except Exception as e:
         logging.error(f"設定ファイルの読み込みに失敗しました: {e}")
         raise
@@ -53,6 +54,17 @@ def _normalize_model_path(model_path: str) -> str:
     if model_path.endswith(".safetensors"):
         return model_path
     return f"{model_path}.safetensors"
+
+
+def _build_output_timestamp() -> str:
+    return datetime.now().strftime("%Y%m%d%H%M%S%f")
+
+
+def _build_model_initials(model_name: str) -> str:
+    basename = os.path.splitext(os.path.basename(model_name))[0]
+    words = [word for word in basename.split("_") if word]
+    initials = "".join(word[:3] for word in words)
+    return initials or "model"
 
 
 def load_model(model_path: str, use_sdxl_keys: bool = None) -> SDKeyWrapper:
@@ -115,9 +127,9 @@ def generate_filename(left_model_name: str, right_model_name: str) -> str:
     Returns:
         生成されたファイル名（.safetensors 拡張子付き）。
     """
-    left_initials = "".join([word[:3] for word in left_model_name.split("_")])
-    right_initials = "".join([word[:3] for word in right_model_name.split("_")])
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    left_initials = _build_model_initials(left_model_name)
+    right_initials = _build_model_initials(right_model_name)
+    timestamp = _build_output_timestamp()
     return f"{left_initials}_{right_initials}_{timestamp}.safetensors"
 
 

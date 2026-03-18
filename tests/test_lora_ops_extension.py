@@ -1,3 +1,7 @@
+import os
+import sys
+import types
+
 from extensions import lora_ops
 
 
@@ -64,3 +68,44 @@ def test_run_merge_lora_forwards_sd_model_to_selected_runner(monkeypatch):
     assert captured["args"].precision == "fp16"
     assert captured["args"].save_precision == "bf16"
     assert output_path == "merged_checkpoint.safetensors"
+
+
+def test_ensure_kohya_import_aliases_registers_vendor_namespace_packages():
+    original_modules = {}
+    target_names = ["scripts", "scripts.kohyas", "library"]
+
+    try:
+        for name in target_names:
+            original_modules[name] = sys.modules.pop(name, None)
+
+        kohyas_dir = lora_ops._ensure_kohya_import_aliases()
+
+        assert sys.modules["scripts"].__path__ == [os.path.dirname(kohyas_dir)]
+        assert sys.modules["scripts.kohyas"].__path__ == [kohyas_dir]
+        assert sys.modules["library"].__path__ == [kohyas_dir]
+    finally:
+        for name in target_names:
+            sys.modules.pop(name, None)
+        for name, module in original_modules.items():
+            if module is not None:
+                sys.modules[name] = module
+
+
+def test_load_kohya_symbol_imports_local_vendor_module(monkeypatch):
+    fake_module = types.SimpleNamespace(svd="callable")
+    calls = {}
+
+    def fake_import_module(name, package=None):
+        calls["name"] = name
+        calls["package"] = package
+        return fake_module
+
+    monkeypatch.setattr(lora_ops.importlib, "import_module", fake_import_module)
+
+    symbol = lora_ops._load_kohya_symbol("extract_lora_from_models", "svd")
+
+    assert symbol == "callable"
+    assert calls == {
+        "name": ".kohyas.extract_lora_from_models",
+        "package": "extensions.lora_ops",
+    }

@@ -5,6 +5,7 @@ import gradio as gr
 # Ensure the project root is in sys.path so 'ui' can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from module.utility import generate_filename
 from ui.components.mbw_each import render_mbw_each_tab
 from ui.components.multi_merge import render_multi_merge_tab
 from ui.components.generation import render_generation_tab
@@ -16,6 +17,7 @@ from ui.components.dice_roll import render_dice_roll_tab
 from ui.components.presets import render_presets_tab
 from ui.components.lora_ops import render_lora_ops_tab
 from ui.components.poison_merge import render_poison_merge_tab
+from ui.components.arthemy_tuner import render_arthemy_tuner_tab
 from ui.components.ab_test import render_ab_test_tab
 from ui.utils import enqueue_merge_task, get_model_list, get_model_path
 
@@ -23,6 +25,10 @@ from module.error_messages import build_user_error_message
 from ui.components.queue_ui import render_queue_tab
 from ui.components.bayesian_merger import create_bayesian_merger_ui
 from module.queue_manager import queue_manager
+
+
+def _create_default_merge_output_name(model_a_name: str, model_b_name: str) -> str:
+    return generate_filename(model_a_name, model_b_name)
 
 
 def create_ui():
@@ -161,7 +167,7 @@ def create_ui():
                     if use_adv and out:
                         config["output_name"] = out
                     else:
-                        out = f"queue_{int(vel * 100)}_{strat}.safetensors"
+                        out = _create_default_merge_output_name(a, b)
 
                     try:
                         task_id = enqueue_merge_task(
@@ -242,22 +248,23 @@ def create_ui():
             with gr.TabItem("Poison Merge"):
                 render_poison_merge_tab()
 
-            # タブ 13: Queue Manager
+            # タブ 13: Arthemy Tuner
+            with gr.TabItem("Arthemy Tuner"):
+                render_arthemy_tuner_tab()
+
+            # タブ 14: Queue Manager
             with gr.TabItem("Tasks Queue"):
                 render_queue_tab()
 
-            # タブ 14: Bayesian Merger
+            # タブ 15: Bayesian Merger
             with gr.TabItem("Bayesian Merger"):
                 create_bayesian_merger_ui()
 
     return app
 
 
-if __name__ == "__main__":
-    app = create_ui()
-    
-    # launch arguments for network exposure and UI styles
-    head_content = """
+def get_head_content() -> str:
+    return """
 <style>
 /* Optional custom CSS overrides for better appearance */
 .gradio-container { max-width: 1400px !important; }
@@ -276,4 +283,22 @@ document.addEventListener('keydown', function(e) {
 });
 </script>
 """
-    app.launch(server_name="0.0.0.0", server_port=7860, share=False, theme=gr.themes.Soft(), head=head_content)
+
+
+def launch_ui(
+    server_name: str = "0.0.0.0",
+    server_port: int = 7860,
+    share: bool = False,
+):
+    app = create_ui()
+    app.launch(
+        server_name=server_name,
+        server_port=server_port,
+        share=share,
+        theme=gr.themes.Soft(),
+        head=get_head_content(),
+    )
+
+
+if __name__ == "__main__":
+    launch_ui()

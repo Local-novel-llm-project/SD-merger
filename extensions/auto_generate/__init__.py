@@ -82,13 +82,12 @@ def auto_generate_hook(config_dict: dict, output_path: str):
 
     # 最初の生成画像をヒストリのプレビュー用に登録する
     if generated_image_paths:
-        output_name = base_name  # configの出力名はbase_name相当
         update_dict = {"preview_image": generated_image_paths[0], "generated_images": generated_image_paths}
-        success = update_history_entry(output_name, update_dict)
+        success = update_history_entry(output_path, update_dict)
         if success:
-            logger.info(f"ヒストリエントリの画像を更新しました: {output_name}")
+            logger.info(f"ヒストリエントリの画像を更新しました: {output_path}")
         else:
-            logger.warning(f"ヒストリエントリが見つからなかったため画像パスの更新をスキップしました: {output_name}")
+            logger.warning(f"ヒストリエントリが見つからなかったため画像パスの更新をスキップしました: {output_path}")
 
 
 def setup():

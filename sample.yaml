@@ -1,6 +1,7 @@
 # SD-merger Sample YAML Config with All Extensions
 
 # ターゲットモデル（メタデータなどの引き継ぎ元。空の場合は最初のモデルを利用）
+# Arthemy Tuner だけを使う場合は、target_model を指定して models を省略できます。
 target_model: "path/to/target_model.safetensors"
 
 # --- 1. 基本のマージモデルリスト ---
@@ -117,6 +118,11 @@ arthemy_tuner:
   unet:
     # UNet全体の基本スケール
     base_scale: 1.0
+
+    # オプション: 19個のブロック値を直接指定して grouped slider より優先
+    # 文字列/配列のどちらでも指定可能
+    # vectors_override: "1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0"
+    # vectors_override: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
     # --- INPUT BLOCKS: 構造とコンポジション ---
     # 空間のジオメトリ、高解像度のレイアウト (IN: 0, 1)

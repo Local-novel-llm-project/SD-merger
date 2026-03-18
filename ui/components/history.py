@@ -7,6 +7,72 @@ import tempfile
 from ui.utils import enqueue_merge_task
 
 
+def _get_primary_model_config(config: dict) -> dict:
+    models = config.get("models")
+    if not isinstance(models, list):
+        return {}
+    for model in models:
+        if isinstance(model, dict):
+            return model
+    return {}
+
+
+def _build_history_row(entry: dict) -> dict:
+    config = entry.get("config", {})
+    model_config = _get_primary_model_config(config)
+
+    strategy = model_config.get("strategy", "")
+    velocity = model_config.get("velocity", "")
+    model_a = model_config.get("left", "")
+    model_b = model_config.get("right", "")
+
+    if not model_config and config.get("target_model"):
+        strategy = "target-only"
+        model_a = config.get("target_model", "")
+
+    return {
+        "Date": entry.get("date", ""),
+        "Output Name": entry.get("output_name", ""),
+        "Strategy": strategy,
+        "Velocity": velocity,
+        "Model A": model_a,
+        "Model B": model_b,
+        "Status": entry.get("status", "Unknown"),
+    }
+
+
+def _resolve_imported_output_name(
+    config: dict,
+    default_output_name: str = "imported_recipe_merge.safetensors",
+) -> str:
+    output_name = config.get("output_name")
+    if output_name:
+        return str(output_name)
+
+    model_config = _get_primary_model_config(config)
+    if model_config.get("output_name"):
+        return str(model_config["output_name"])
+
+    return default_output_name
+
+
+def _cleanup_download_file(path: str | None) -> None:
+    if not path:
+        return
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
+def _create_download_recipe_file(entry: dict) -> str:
+    fd, path = tempfile.mkstemp(suffix=".yaml")
+    os.close(fd)
+    export_recipe(entry, path)
+    return path
+
+
 def get_history_df():
     history = load_history()
     if not history:
@@ -22,21 +88,7 @@ def get_history_df():
             ]
         )
 
-    data = []
-    for h in history:
-        cfg = h.get("config", {})
-        models = cfg.get("models", [{}])[0]
-        data.append(
-            {
-                "Date": h.get("date", ""),
-                "Output Name": h.get("output_name", ""),
-                "Strategy": models.get("strategy", ""),
-                "Velocity": models.get("velocity", ""),
-                "Model A": models.get("left", ""),
-                "Model B": models.get("right", ""),
-                "Status": h.get("status", "Unknown"),
-            }
-        )
+    data = [_build_history_row(entry) for entry in history]
     return pd.DataFrame(data)
 
 
@@ -80,26 +132,28 @@ def render_history_tab():
         return gr.update(interactive=True), gr.update(interactive=True), evt.index[0]
 
     selected_index = gr.State(-1)
+    download_path_state = gr.State(None)
 
     history_table.select(on_select, None, [rerun_btn, download_btn, selected_index])
 
     refresh_btn.click(on_refresh, inputs=[], outputs=[history_table])
 
-    def on_download(idx):
+    def on_download(idx, previous_path):
+        _cleanup_download_file(previous_path)
         if idx < 0:
-            return None
+            return None, None
         history = load_history()
         if idx >= len(history):
-            return None
+            return None, None
         entry = history[idx]
+        path = _create_download_recipe_file(entry)
+        return path, path
 
-        # Create temp yaml
-        fd, path = tempfile.mkstemp(suffix=".yaml")
-        os.close(fd)
-        export_recipe(entry, path)
-        return path
-
-    download_btn.click(on_download, inputs=[selected_index], outputs=[download_btn])
+    download_btn.click(
+        on_download,
+        inputs=[selected_index, download_path_state],
+        outputs=[download_btn, download_path_state],
+    )
 
     def on_rerun(idx):
         if idx < 0:
@@ -137,11 +191,9 @@ def render_history_tab():
 
         try:
             with open(file.name, "r", encoding="utf-8") as f:
-                config = yaml.safe_load(f)
+                config = yaml.safe_load(f) or {}
 
-            out_name = config.get("output_name", "imported_recipe_merge.safetensors")
-            if "models" in config and len(config["models"]) > 0 and "output_name" in config["models"][0]:
-                out_name = config["models"][0]["output_name"]
+            out_name = _resolve_imported_output_name(config)
 
             task_id = enqueue_merge_task(
                 config,
