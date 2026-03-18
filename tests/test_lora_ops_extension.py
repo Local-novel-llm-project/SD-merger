@@ -70,6 +70,29 @@ def test_run_merge_lora_forwards_sd_model_to_selected_runner(monkeypatch):
     assert output_path == "merged_checkpoint.safetensors"
 
 
+def test_run_merge_lora_supports_compact_model_ratio_syntax(monkeypatch):
+    captured = {}
+
+    def fake_runner(args):
+        captured["args"] = args
+
+    monkeypatch.setattr(lora_ops, "_select_merge_runner", lambda is_sdxl: fake_runner)
+
+    output_path = lora_ops._run_merge_lora(
+        {
+            "models": "style_a.safetensors:0.4, style_b.safetensors:0.9",
+            "output": "merged_lora.safetensors",
+        }
+    )
+
+    assert captured["args"].models == [
+        "style_a.safetensors",
+        "style_b.safetensors",
+    ]
+    assert captured["args"].ratios == [0.4, 0.9]
+    assert output_path == "merged_lora.safetensors"
+
+
 def test_ensure_kohya_import_aliases_registers_vendor_namespace_packages():
     original_modules = {}
     target_names = ["scripts", "scripts.kohyas", "library"]

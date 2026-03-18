@@ -5,6 +5,7 @@ import importlib
 from types import SimpleNamespace
 import types
 
+from module.lora_input import normalize_lora_models_and_ratios
 from module.extension_manager import register_pre_config_hook
 
 
@@ -113,6 +114,10 @@ def _select_merge_runner(is_sdxl: bool):
 def _run_merge_lora(op: dict):
     merge = _select_merge_runner(op.get("sdxl", False))
     is_checkpoint_merge = bool(op.get("sd_model"))
+    model_paths, ratios = normalize_lora_models_and_ratios(
+        op.get("models"),
+        op.get("ratios"),
+    )
 
     if is_checkpoint_merge:
         logging.info("LoRAをモデルへマージします...")
@@ -120,8 +125,8 @@ def _run_merge_lora(op: dict):
         logging.info("LoRA同士のマージ(Merge)を実行します...")
 
     args = SimpleNamespace(
-        models=op["models"],
-        ratios=op.get("ratios", [1.0] * len(op["models"])),
+        models=model_paths,
+        ratios=ratios,
         sd_model=op.get("sd_model"),
         save_to=op["output"],
         precision=op.get("precision", "float"),

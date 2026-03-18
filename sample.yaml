@@ -79,6 +79,7 @@ models:
 #     - type: "merge"
 #       models: ["lora_A.safetensors", "lora_B.safetensors"]
 #       ratios: [0.5, 0.5]
+#       # models: ["lora_A.safetensors:0.5", "lora_B.safetensors:0.5"]  # 比率を埋め込み指定してもOK
 #       output: "merged_lora.safetensors"
 #       sdxl: true
 #
@@ -87,6 +88,7 @@ models:
 #       sd_model: "path/to/base_model.safetensors"
 #       models: ["lora_A.safetensors", "lora_B.safetensors"]
 #       ratios: [0.8, 0.2]
+#       # models: ["lora_A.safetensors:0.8", "lora_B.safetensors:0.2"]  # この書式でも指定可能
 #       output: "model_with_lora.safetensors"
 #       sdxl: true
 

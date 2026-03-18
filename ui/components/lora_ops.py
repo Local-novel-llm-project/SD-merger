@@ -3,6 +3,10 @@ import os
 import gradio as gr
 
 from module.error_messages import build_user_error_message
+from module.lora_input import (
+    is_compact_lora_spec_text,
+    normalize_lora_models_and_ratios,
+)
 from ui.utils import enqueue_merge_task, get_model_list, get_model_path
 
 
@@ -16,24 +20,34 @@ def _resolve_output_path(output_name):
     )
 
 
-def _parse_ratio_text(ratio_text, model_count):
-    if not ratio_text or not ratio_text.strip():
-        return [1.0] * model_count, None
+def _has_compact_lora_spec_hint(ratio_text):
+    return bool(ratio_text and ":" in ratio_text)
 
+
+def _parse_lora_models_and_ratios(selected_models, ratio_text):
     try:
-        ratio_list = [float(r.strip()) for r in ratio_text.split(",") if r.strip()]
+        if _has_compact_lora_spec_hint(ratio_text):
+            if not is_compact_lora_spec_text(ratio_text):
+                raise ValueError("Invalid compact LoRA ratio format.")
+            model_names, ratio_list = normalize_lora_models_and_ratios(ratio_text)
+        else:
+            if not selected_models:
+                return None, None, "At least one LoRA model is required."
+            model_names, ratio_list = normalize_lora_models_and_ratios(
+                selected_models,
+                ratio_text,
+            )
     except ValueError:
-        return None, "Invalid ratios format. Must be comma separated numbers."
+        return (
+            None,
+            None,
+            "Invalid format. Use '0.5, 1.0' or 'lora_a.safetensors:0.5, lora_b.safetensors:1.0'.",
+        )
 
-    if not ratio_list:
-        ratio_list = [1.0] * model_count
+    if not model_names:
+        return None, None, "At least one LoRA model is required."
 
-    if len(ratio_list) < model_count:
-        ratio_list.extend([1.0] * (model_count - len(ratio_list)))
-    elif len(ratio_list) > model_count:
-        ratio_list = ratio_list[:model_count]
-
-    return ratio_list, None
+    return [get_model_path(model_name) for model_name in model_names], ratio_list, None
 
 
 def render_lora_ops_tab():
@@ -143,9 +157,9 @@ def render_lora_ops_tab():
                         multiselect=True,
                     )
                     ratios = gr.Textbox(
-                        label="Ratios (comma separated)",
+                        label="Ratios or LoRA:ratio list",
                         value="1.0, 1.0",
-                        placeholder="1.0, 0.5",
+                        placeholder="1.0, 0.5 or style_a.safetensors:0.4, style_b.safetensors:0.9",
                     )
                     strategy = gr.Dropdown(
                         label="Merge Strategy",
@@ -191,14 +205,9 @@ def render_lora_ops_tab():
             merge_log = gr.Textbox(label="Merge Log")
 
             def run_merge(mods, rats, strat, out, prec, s_prec, conc, shuf, sdxl, v2):
-                if not mods or len(mods) < 1:
-                    return "At least one LoRA model is required."
-
-                ratio_list, error = _parse_ratio_text(rats, len(mods))
+                model_paths, ratio_list, error = _parse_lora_models_and_ratios(mods, rats)
                 if error:
                     return error
-
-                model_paths = [get_model_path(m) for m in mods]
 
                 config = {
                     "lora_ops": {
@@ -253,9 +262,9 @@ def render_lora_ops_tab():
                         multiselect=True,
                     )
                     checkpoint_ratios = gr.Textbox(
-                        label="Ratios (comma separated)",
+                        label="Ratios or LoRA:ratio list",
                         value="1.0",
-                        placeholder="1.0, 0.5",
+                        placeholder="1.0, 0.5 or style_a.safetensors:0.4, style_b.safetensors:0.9",
                     )
                     checkpoint_output = gr.Textbox(
                         label="Output Filename",
@@ -284,10 +293,7 @@ def render_lora_ops_tab():
             def run_apply(base, mods, rats, out, prec, s_prec, sdxl, v2):
                 if not base:
                     return "Base checkpoint is required."
-                if not mods or len(mods) < 1:
-                    return "At least one LoRA model is required."
-
-                ratio_list, error = _parse_ratio_text(rats, len(mods))
+                model_paths, ratio_list, error = _parse_lora_models_and_ratios(mods, rats)
                 if error:
                     return error
 
@@ -298,7 +304,7 @@ def render_lora_ops_tab():
                             {
                                 "type": "apply",
                                 "sd_model": get_model_path(base),
-                                "models": [get_model_path(m) for m in mods],
+                                "models": model_paths,
                                 "ratios": ratio_list,
                                 "output": _resolve_output_path(out),
                                 "precision": prec,
