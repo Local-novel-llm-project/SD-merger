@@ -137,16 +137,25 @@ def _load_kohya_symbol(module_name: str, symbol_name: str):
     return getattr(module, symbol_name)
 
 
+def _ensure_output_parent_dir(output_path: str) -> str:
+    normalized_output_path = os.fspath(output_path)
+    parent_dir = os.path.dirname(normalized_output_path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+    return normalized_output_path
+
+
 def _run_extract_lora(op: dict):
     svd = _load_kohya_symbol("extract_lora_from_models", "svd")
     logging.info("LoRA抽出(Extract)を実行します...")
+    output_path = _ensure_output_parent_dir(op["output"])
     args = SimpleNamespace(
         v2=op.get("v2", False),
         sdxl=op.get("sdxl", False),
         save_precision=op.get("save_precision", "float"),
         model_org=op["base_model"],
         model_tuned=op["tuned_model"],
-        save_to=op["output"],
+        save_to=output_path,
         dim=op.get("dim", 128),
         v_parameterization=None,
         conv_dim=op.get("conv_dim", None),
@@ -155,8 +164,8 @@ def _run_extract_lora(op: dict):
         device=op.get("device", "cpu"),
     )
     svd(args)
-    logging.info(f"LoRA抽出が完了しました -> {op['output']}")
-    return op["output"]
+    logging.info(f"LoRA抽出が完了しました -> {output_path}")
+    return output_path
 
 
 def _select_merge_runner(is_sdxl: bool):
@@ -172,6 +181,7 @@ def _run_merge_lora(op: dict):
         op.get("models"),
         op.get("ratios"),
     )
+    output_path = _ensure_output_parent_dir(op["output"])
 
     if is_checkpoint_merge:
         logging.info("LoRAをモデルへマージします...")
@@ -182,7 +192,7 @@ def _run_merge_lora(op: dict):
         models=model_paths,
         ratios=ratios,
         sd_model=op.get("sd_model"),
-        save_to=op["output"],
+        save_to=output_path,
         precision=op.get("precision", "float"),
         save_precision=op.get("save_precision", "float"),
         sdxl=op.get("sdxl", False),
@@ -193,10 +203,10 @@ def _run_merge_lora(op: dict):
     )
     merge(args)
     if is_checkpoint_merge:
-        logging.info(f"LoRAのモデル適用が完了しました -> {op['output']}")
+        logging.info(f"LoRAのモデル適用が完了しました -> {output_path}")
     else:
-        logging.info(f"LoRAマージが完了しました -> {op['output']}")
-    return op["output"]
+        logging.info(f"LoRAマージが完了しました -> {output_path}")
+    return output_path
 
 
 def setup():

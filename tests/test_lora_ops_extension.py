@@ -93,6 +93,34 @@ def test_run_merge_lora_supports_compact_model_ratio_syntax(monkeypatch):
     assert output_path == "merged_lora.safetensors"
 
 
+def test_run_merge_lora_creates_parent_directory_for_output(monkeypatch):
+    captured = {}
+    created_dirs = []
+    output_path = os.path.join("nested", "merged_checkpoint.safetensors")
+
+    def fake_runner(args):
+        captured["args"] = args
+
+    monkeypatch.setattr(lora_ops, "_select_merge_runner", lambda is_sdxl: fake_runner)
+    monkeypatch.setattr(
+        lora_ops.os,
+        "makedirs",
+        lambda path, exist_ok=True: created_dirs.append((path, exist_ok)),
+    )
+
+    result = lora_ops._run_merge_lora(
+        {
+            "models": ["style_lora.safetensors"],
+            "ratios": [1.0],
+            "output": output_path,
+        }
+    )
+
+    assert created_dirs == [("nested", True)]
+    assert captured["args"].save_to == output_path
+    assert result == output_path
+
+
 def test_ensure_kohya_import_aliases_registers_vendor_namespace_packages():
     original_modules = {}
     target_names = ["scripts", "scripts.kohyas", "library"]
