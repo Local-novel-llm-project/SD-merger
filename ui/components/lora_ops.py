@@ -69,6 +69,16 @@ def _update_lora_ratio_value(value, ratio_map, model_name):
     return updated_ratio_map
 
 
+def _create_lora_ratio_input(model_name, ratio_value, key_prefix):
+    return gr.Number(
+        label=model_name,
+        value=ratio_value,
+        step=0.01,
+        interactive=True,
+        key=(key_prefix, model_name),
+    )
+
+
 def _parse_compact_lora_ratio_text(ratio_text):
     try:
         if not is_compact_lora_spec_text(ratio_text):
@@ -134,12 +144,7 @@ def _render_lora_ratio_selector(key_prefix):
         gr.Markdown("### LoRA Ratios")
         for model_name, ratio_value in synced_ratio_map.items():
             model_key = gr.State(model_name)
-            ratio_input = gr.Number(
-                label=model_name,
-                value=ratio_value,
-                step=0.01,
-                key=(key_prefix, model_name),
-            )
+            ratio_input = _create_lora_ratio_input(model_name, ratio_value, key_prefix)
             ratio_input.change(
                 _update_lora_ratio_value,
                 inputs=[ratio_input, ratio_state, model_key],

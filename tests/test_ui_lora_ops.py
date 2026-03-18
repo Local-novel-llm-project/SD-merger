@@ -1,4 +1,5 @@
 from ui.components import lora_ops
+import gradio as gr
 
 
 def test_sync_lora_ratio_map_preserves_existing_ratios_and_defaults_new_entries():
@@ -25,6 +26,18 @@ def test_sync_lora_ratio_map_drops_removed_entries():
     assert synced_ratio_map == {
         "style_b.safetensors": 0.9,
     }
+
+
+def test_create_lora_ratio_input_is_explicitly_interactive():
+    with gr.Blocks():
+        ratio_input = lora_ops._create_lora_ratio_input(
+            "style_a.safetensors",
+            0.4,
+            "merge",
+        )
+
+    assert ratio_input.interactive is True
+    assert ratio_input.step == 0.01
 
 
 def test_parse_compact_lora_ratio_text_supports_compact_spec_input():
