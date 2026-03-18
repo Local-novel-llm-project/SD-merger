@@ -434,6 +434,9 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
 
     if config.get("_skip_merge"):
         return config.get("_skip_merge_output")
+    
+    dtype = config.get("dtype", "float16")
+    dtype = getattr(torch, dtype)
 
     recipe, final_config, target_model_path = _build_initial_recipe(config)
     models = config.get("models", [])
@@ -553,7 +556,7 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
         logger.info("sd-mecha がインメモリマージを開始します。")
         try:
             # The output=None tells sd-mecha to return the merged state_dict in memory
-            state_dict = sd_mecha.merge(recipe, output=None)
+            state_dict = sd_mecha.merge(recipe, output_dtype=dtype, output=None)
         except Exception as e:
             logger.error(f"sd-mecha merging error: {e}")
             from module.exceptions import MergeError
@@ -575,7 +578,7 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
         logger.info(f"マージ処理を実行し、{output_path} に保存します...")
         logger.info("sd-mecha がストリーミング処理を開始します。")
         try:
-            sd_mecha.merge(recipe, output=output_path)
+            sd_mecha.merge(recipe, output_dtype=dtype, output=output_path)
         except Exception as e:
             logger.error(f"sd-mecha merging error: {e}")
             from module.exceptions import MergeError
