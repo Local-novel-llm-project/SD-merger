@@ -4,10 +4,11 @@ SD 1.x 系と SDXL 系のキー名プレフィックスの差異を吸収する�
 ラッパークラスを提供する。
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Iterator
+from collections.abc import Mapping
 
 
-class SDKeyWrapper(dict):
+class SDKeyWrapper(Mapping):
     """SD モデルの state_dict をラップし、キー名の変換を行うクラス。
 
     SD 1.x 系の `cond_stage_model.` プレフィックスと
@@ -21,33 +22,48 @@ class SDKeyWrapper(dict):
     _SD1X_PREFIX = "cond_stage_model."
     _SDXL_PREFIX = "conditioner.embedders.0."
 
-    def __init__(self, d: Dict[str, Any], use_sdxl_keys: bool = True):
+    def __init__(self, d: Mapping[str, Any], use_sdxl_keys: bool = True):
+        self._d = d
         self.is_xl = any(k.startswith(self._SDXL_PREFIX) for k in d.keys())
-
-        if use_sdxl_keys and not self.is_xl:
-            d = self._convert_keys(d, self._SD1X_PREFIX, self._SDXL_PREFIX)
-        elif self.is_xl and not use_sdxl_keys:
-            d = self._convert_keys(d, self._SDXL_PREFIX, self._SD1X_PREFIX)
-
-        super().__init__(d)
         self.use_sdxl_keys = use_sdxl_keys
 
-    @staticmethod
-    def _convert_keys(d: Dict[str, Any], from_prefix: str, to_prefix: str) -> Dict[str, Any]:
-        """キーのプレフィックスを変換する。元の辞書は変更しない。
+        self._needs_conversion = False
+        self._from_prefix = ""
+        self._to_prefix = ""
 
-        Args:
-            d: 変換対象の辞書。
-            from_prefix: 変換元プレフィックス。
-            to_prefix: 変換先プレフィックス。
+        if use_sdxl_keys and not self.is_xl:
+            self._needs_conversion = True
+            self._from_prefix = self._SD1X_PREFIX
+            self._to_prefix = self._SDXL_PREFIX
+        elif self.is_xl and not use_sdxl_keys:
+            self._needs_conversion = True
+            self._from_prefix = self._SDXL_PREFIX
+            self._to_prefix = self._SD1X_PREFIX
 
-        Returns:
-            プレフィックスが変換された新しい辞書。
-        """
-        result = {}
-        for k, v in d.items():
-            if k.startswith(from_prefix):
-                result[k.replace(from_prefix, to_prefix, 1)] = v
-            else:
-                result[k] = v
-        return result
+    def _convert_key(self, k: str) -> str:
+        if not self._needs_conversion:
+            return k
+        if k.startswith(self._from_prefix):
+            return k.replace(self._from_prefix, self._to_prefix, 1)
+        return k
+
+    def _revert_key(self, k: str) -> str:
+        if not self._needs_conversion:
+            return k
+        if k.startswith(self._to_prefix):
+            return k.replace(self._to_prefix, self._from_prefix, 1)
+        return k
+
+    def __getitem__(self, key: str) -> Any:
+        original_key = self._revert_key(key)
+        return self._d[original_key]
+
+    def __iter__(self) -> Iterator[str]:
+        for k in self._d.keys():
+            yield self._convert_key(k)
+
+    def __len__(self) -> int:
+        return len(self._d)
+
+    def keys(self):
+        return [self._convert_key(k) for k in self._d.keys()]
