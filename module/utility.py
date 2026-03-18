@@ -4,12 +4,14 @@
 ファイル名生成などの共通ユーティリティ関数を提供する。
 """
 
+import json
 from datetime import datetime
 import logging
 import os
 from typing import Any, Dict
 
-from safetensors.torch import save_file
+from safetensors.torch import save_file, load_file
+from safetensors import safe_open
 from rich.console import Console
 import torch
 import yaml
@@ -68,13 +70,89 @@ def _build_model_initials(model_name: str) -> str:
     return initials or "model"
 
 
-def load_model(model_path: str, use_sdxl_keys: bool | None = None) -> SDKeyWrapper:
+class LazySafetensorsDict(dict):
+    """単一の safetensors ファイルからテンソルを遅延読み込みする辞書クラス。"""
+
+    def __init__(self, path):
+        self.f = safe_open(path, framework="pt", device="cpu")
+        self._keys = self.f.keys()
+
+    def keys(self) -> list:  # type: ignore
+        return self._keys
+
+    def items(self):  # type: ignore
+        for k in self._keys:
+            yield k, self.f.get_tensor(k)
+
+    def values(self):  # type: ignore
+        for k in self._keys:
+            yield self.f.get_tensor(k)
+
+    def __getitem__(self, key):
+        return self.f.get_tensor(key)
+
+    def __iter__(self):
+        return iter(self._keys)
+
+    def __len__(self):
+        return len(self._keys)
+
+    def __contains__(self, key):
+        return key in self._keys
+
+
+class ShardedLazySafetensorsDict(dict):
+    """分割された safetensors ファイル群からテンソルを遅延読み込みする辞書クラス。"""
+
+    def __init__(self, index_path: str):
+        self.index_path = index_path
+        self.base_dir = os.path.dirname(index_path)
+        with open(index_path, "r", encoding="utf-8") as f:
+            index_data = json.load(f)
+        self.weight_map = index_data.get("weight_map", {})
+        self._keys = list(self.weight_map.keys())
+
+    def keys(self) -> list:  # type: ignore
+        return self._keys
+
+    def items(self):  # type: ignore
+        for k in self._keys:
+            yield k, self[k]
+
+    def values(self):  # type: ignore
+        for k in self._keys:
+            yield self[k]
+
+    def __getitem__(self, key: str):
+        if key not in self.weight_map:
+            raise KeyError(key)
+        filename = self.weight_map[key]
+        file_path = os.path.join(self.base_dir, filename)
+        # 都度開閉することでファイルディスクリプタの枯渇を防ぐ
+        with safe_open(file_path, framework="pt", device="cpu") as f:
+            return f.get_tensor(key)
+
+    def __iter__(self):
+        return iter(self._keys)
+
+    def __len__(self):
+        return len(self._keys)
+
+    def __contains__(self, key):
+        return key in self.weight_map
+
+
+def load_model(
+    model_path: str, use_sdxl_keys: bool | None = None, lazy_load: bool = True
+) -> SDKeyWrapper:
     """safetensors 形式のモデルを読み込み、SDKeyWrapper でラップして返す。
+    モデルと同じディレクトリにある `config.json` も読み込む。
 
     Args:
-        model_path: モデルファイルのパス。
+        model_path: モデルファイルのパス、または分割モデルの index.json のパス、もしくはそれを含むディレクトリ。
         use_sdxl_keys: SDXL 形式のキーを使用するかどうか。
             None の場合はモデルのキーから自動判定する。
+        lazy_load: テンソルを遅延読み込み（Lazy Load）するかどうか。False の場合はメモリ上に全て展開する。
 
     Returns:
         読み込まれたモデルの SDKeyWrapper。
@@ -82,46 +160,68 @@ def load_model(model_path: str, use_sdxl_keys: bool | None = None) -> SDKeyWrapp
     Raises:
         FileNotFoundError: モデルファイルが存在しない場合。
     """
-    model_path = _normalize_model_path(model_path)
     try:
         console.log(f"[bold green]モデルを読み込んでいます: {model_path}[/bold green]")
 
-        # safetensors ではない場合は mmap を有効にして torch.load
-        if not model_path.endswith(".safetensors"):
-            raw = torch.load(model_path, map_location="cpu", mmap=True, weights_only=True)
-            if "state_dict" in raw:
-                raw = raw["state_dict"]
-            is_xl = any(k.startswith("conditioner.embedders.0.") for k in raw.keys())
-            effective_use_sdxl = is_xl if use_sdxl_keys is None else use_sdxl_keys
-            return SDKeyWrapper(raw, effective_use_sdxl)
+        # モデルパスと config.json の探索
+        resolved_path = model_path
+        config_path = None
+        if os.path.isdir(model_path):
+            # ディレクトリの場合、index.json を探す
+            potential_index = os.path.join(model_path, "model.safetensors.index.json")
+            if os.path.exists(potential_index):
+                resolved_path = potential_index
+            config_path = os.path.join(model_path, "config.json")
+        elif os.path.isfile(model_path):
+            # ファイルの場合、同じディレクトリの config.json を探す
+            config_path = os.path.join(os.path.dirname(model_path), "config.json")
 
-        from safetensors import safe_open
+        config = None
+        if config_path and os.path.exists(config_path):
+            console.log(f"[bold green]設定ファイルを読み込んでいます: {config_path}[/bold green]")
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
 
-        class LazySafetensorsDict(dict):
-            def __init__(self, path):
-                self.f = safe_open(path, framework="pt", device="cpu")
-                self._keys = self.f.keys()
+        # 分割モデル (Sharded Model) かどうかの判定
+        is_sharded = False
+        if os.path.isdir(resolved_path):
+            # 再度チェック (ディレクトリが直接渡された場合)
+            potential_index = os.path.join(resolved_path, "model.safetensors.index.json")
+            if os.path.exists(potential_index):
+                is_sharded = True
+                index_path = potential_index
+        elif resolved_path.endswith(".json"):
+            is_sharded = True
+            index_path = resolved_path
 
-            def keys(self) -> list:  # type: ignore
-                return self._keys
-
-            def items(self):  # type: ignore
-                for k in self._keys:
-                    yield k, self.f.get_tensor(k)
-
-            def __getitem__(self, key):
-                return self.f.get_tensor(key)
-
-            def __iter__(self):
-                return iter(self._keys)
-
-            def __len__(self):
-                return len(self._keys)
-
-            def __contains__(self, key):
-                return key in self._keys
-
-        raw = LazySafetensorsDict(model_path)
+        if is_sharded:
+            if lazy_load:
+                raw = ShardedLazySafetensorsDict(index_path)
+            else:
+                raw = {}
+                base_dir = os.path.dirname(index_path)
+                with open(index_path, "r", encoding="utf-8") as f:
+                    index_data = json.load(f)
+                weight_map = index_data.get("weight_map", {})
+                unique_files = set(weight_map.values())
+                for filename in unique_files:
+                    file_path = os.path.join(base_dir, filename)
+                    file_tensors = load_file(file_path, device="cpu")
+                    raw.update(file_tensors)
+        else:
+            model_file_path = _normalize_model_path(resolved_path)
+            # safetensors ではない場合は mmap を有効にして torch.load
+            if not model_file_path.endswith(".safetensors"):
+                raw = torch.load(
+                    model_file_path, map_location="cpu", mmap=lazy_load, weights_only=True
+                )
+                if "state_dict" in raw:
+                    raw = raw["state_dict"]
+            else:
+                if lazy_load:
+                    raw = LazySafetensorsDict(model_file_path)
+                else:
+                    raw = load_file(model_file_path, device="cpu")
 
         # use_sdxl_keys が未指定の場合、モデル自体の形式から自動判定
         if use_sdxl_keys is None:
@@ -130,7 +230,7 @@ def load_model(model_path: str, use_sdxl_keys: bool | None = None) -> SDKeyWrapp
         else:
             effective_use_sdxl = use_sdxl_keys
 
-        return SDKeyWrapper(raw, effective_use_sdxl)
+        return SDKeyWrapper(raw, effective_use_sdxl, config=config)
     except Exception as e:
         logging.error(f"{model_path} からモデルの読み込みに失敗しました: {e}")
         raise

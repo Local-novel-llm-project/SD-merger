@@ -126,7 +126,11 @@ def create_ui():
                         model_list = get_model_list()
                         model_a = gr.Dropdown(label="Model A (Left)", choices=model_list)
                         model_b = gr.Dropdown(label="Model B (Right)", choices=model_list)
-                        model_c = gr.Dropdown(label="Model C (Base/Target, optional)", choices=["選択しない"] + model_list, value="選択しない")
+                        model_c = gr.Dropdown(
+                            label="Model C (Base/Target, optional)",
+                            choices=["選択しない"] + model_list,
+                            value="選択しない",
+                        )
 
                         def refresh_dropdowns():
                             updated_list = get_model_list()
@@ -136,7 +140,9 @@ def create_ui():
                                 gr.update(choices=["選択しない"] + updated_list),
                             ]
 
-                        refresh_model_btn.click(refresh_dropdowns, inputs=[], outputs=[model_a, model_b, model_c])
+                        refresh_model_btn.click(
+                            refresh_dropdowns, inputs=[], outputs=[model_a, model_b, model_c]
+                        )
 
                     with gr.Column(scale=1):
                         strategy = gr.Dropdown(
@@ -178,18 +184,25 @@ def create_ui():
 
                 with gr.Row():
                     with gr.Accordion("Advanced Options", open=False):
-                        use_advanced_options = gr.Checkbox(label="Enable Advanced Options", value=False)
+                        use_advanced_options = gr.Checkbox(
+                            label="Enable Advanced Options", value=False
+                        )
                         mbw_str = gr.Textbox(
                             label="Merge Block Weight (MBW)",
                             placeholder="e.g. 1,0.5,0.5,0...",
                         )
                         bake_in_vae = gr.Dropdown(label="Bake in VAE", choices=get_model_list())
-                        output_name = gr.Textbox(label="Output Filename", value="merged_model.safetensors")
+                        output_name = gr.Textbox(
+                            label="Output Filename", value="merged_model.safetensors"
+                        )
+                        lazy_load_opt = gr.Checkbox(
+                            label="Enable Lazy Load (Memory saving)", value=True
+                        )
 
                 merge_btn = gr.Button("Merge Models", variant="primary")
                 merge_output = gr.Textbox(label="Output Log")
 
-                def run_merge(a, b, c, strat, t_strat, vel, use_adv, mbw, vae, out):
+                def run_merge(a, b, c, strat, t_strat, vel, use_adv, mbw, vae, out, lazy_load_opt):
                     if not a or not b:
                         return "Model A and Model B are required."
 
@@ -202,6 +215,7 @@ def create_ui():
 
                     config = {
                         "target_model": target_model_path,
+                        "lazy_load": lazy_load_opt,
                         "models": [
                             {
                                 "left": left_model_path,
@@ -245,6 +259,7 @@ def create_ui():
                         mbw_str,
                         bake_in_vae,
                         output_name,
+                        lazy_load_opt,
                     ],
                     outputs=[merge_output],
                 )
@@ -314,6 +329,7 @@ def create_ui():
                 create_bayesian_merger_ui()
 
     return app
+
 
 def launch_ui(
     server_name: str = "0.0.0.0",
