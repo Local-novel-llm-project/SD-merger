@@ -9,7 +9,7 @@ import logging
 import os
 from typing import Any, Dict
 
-from safetensors.torch import load_file, save_file
+from safetensors.torch import save_file
 from rich.console import Console
 import torch
 import yaml
@@ -44,14 +44,15 @@ def load_yaml_config(config_path: str) -> Dict[str, Any]:
 
 def _normalize_model_path(model_path: str) -> str:
     """モデルパスに .safetensors 拡張子を付加する（二重付加を防止）。
+    ただし、すでに .pt や .ckpt などの拡張子を持っている場合はそのまま返す。
 
     Args:
         model_path: モデルのパス。
 
     Returns:
-        .safetensors 拡張子付きのパス。
+        正規化されたパス。
     """
-    if model_path.endswith(".safetensors"):
+    if any(model_path.endswith(ext) for ext in [".safetensors", ".pt", ".ckpt", ".bin"]):
         return model_path
     return f"{model_path}.safetensors"
 
@@ -67,7 +68,7 @@ def _build_model_initials(model_name: str) -> str:
     return initials or "model"
 
 
-def load_model(model_path: str, use_sdxl_keys: bool = None) -> SDKeyWrapper:
+def load_model(model_path: str, use_sdxl_keys: bool | None = None) -> SDKeyWrapper:
     """safetensors 形式のモデルを読み込み、SDKeyWrapper でラップして返す。
 
     Args:
@@ -84,13 +85,51 @@ def load_model(model_path: str, use_sdxl_keys: bool = None) -> SDKeyWrapper:
     model_path = _normalize_model_path(model_path)
     try:
         console.log(f"[bold green]モデルを読み込んでいます: {model_path}[/bold green]")
-        raw = load_file(model_path)
+
+        # safetensors ではない場合は mmap を有効にして torch.load
+        if not model_path.endswith(".safetensors"):
+            raw = torch.load(model_path, map_location="cpu", mmap=True, weights_only=True)
+            if "state_dict" in raw:
+                raw = raw["state_dict"]
+            is_xl = any(k.startswith("conditioner.embedders.0.") for k in raw.keys())
+            effective_use_sdxl = is_xl if use_sdxl_keys is None else use_sdxl_keys
+            return SDKeyWrapper(raw, effective_use_sdxl)
+
+        from safetensors import safe_open
+
+        class LazySafetensorsDict(dict):
+            def __init__(self, path):
+                self.f = safe_open(path, framework="pt", device="cpu")
+                self._keys = self.f.keys()
+
+            def keys(self) -> list:  # type: ignore
+                return self._keys
+
+            def items(self):  # type: ignore
+                for k in self._keys:
+                    yield k, self.f.get_tensor(k)
+
+            def __getitem__(self, key):
+                return self.f.get_tensor(key)
+
+            def __iter__(self):
+                return iter(self._keys)
+
+            def __len__(self):
+                return len(self._keys)
+
+            def __contains__(self, key):
+                return key in self._keys
+
+        raw = LazySafetensorsDict(model_path)
+
         # use_sdxl_keys が未指定の場合、モデル自体の形式から自動判定
         if use_sdxl_keys is None:
             is_xl = any(k.startswith("conditioner.embedders.0.") for k in raw.keys())
             effective_use_sdxl = is_xl
         else:
             effective_use_sdxl = use_sdxl_keys
+
         return SDKeyWrapper(raw, effective_use_sdxl)
     except Exception as e:
         logging.error(f"{model_path} からモデルの読み込みに失敗しました: {e}")

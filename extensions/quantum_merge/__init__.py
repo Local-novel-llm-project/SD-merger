@@ -49,9 +49,7 @@ def process_fft_chunked(
 
             # hyper_out のサイズ調整
             if hyper_out.shape[-1] < freq_dim:
-                coeff = hyper_out.repeat(1, freq_dim // hyper_out.shape[-1] + 1)[
-                    :, :freq_dim
-                ]
+                coeff = hyper_out.repeat(1, freq_dim // hyper_out.shape[-1] + 1)[:, :freq_dim]
             else:
                 coeff = hyper_out[:, :freq_dim]
 
@@ -60,9 +58,7 @@ def process_fft_chunked(
             magnitude_blend = torch.sigmoid(coeff * 5)
             phase_blend = torch.sigmoid(coeff * 3 - 1)
 
-            blended_fft_real = (
-                magnitude_blend * fft1.real + (1 - magnitude_blend) * fft2.real
-            )
+            blended_fft_real = magnitude_blend * fft1.real + (1 - magnitude_blend) * fft2.real
             blended_fft_imag = phase_blend * fft1.imag + (1 - phase_blend) * fft2.imag
             blended_fft = torch.complex(blended_fft_real, blended_fft_imag)
 
@@ -92,11 +88,7 @@ def strategy_quantum(
     プロンプトから生成された hyper_out を用いて FFT 領域でブレンドを行う。
     """
     key = kwargs.get("key", "")
-    global \
-        _QUANTUM_HYPER_OUT, \
-        _QUANTUM_ENTANGLEMENT, \
-        _QUANTUM_CHUNK_SIZE, \
-        _QUANTUM_PROMPT
+    global _QUANTUM_HYPER_OUT, _QUANTUM_ENTANGLEMENT, _QUANTUM_CHUNK_SIZE, _QUANTUM_PROMPT
 
     # hyper_out が未生成、または weight 以外のパラメータ（bias等）は単純平均
     if _QUANTUM_HYPER_OUT is None or "weight" not in key:
@@ -111,18 +103,12 @@ def strategy_quantum(
     decoherence_mask = torch.rand(a.shape, generator=generator, device="cpu") < 0.2
 
     # FFTベースのブレンド
-    blended = process_fft_chunked(
-        a, b, _QUANTUM_HYPER_OUT, decoherence_mask, _QUANTUM_CHUNK_SIZE
-    )
+    blended = process_fft_chunked(a, b, _QUANTUM_HYPER_OUT, decoherence_mask, _QUANTUM_CHUNK_SIZE)
 
     # 量子もつれ (Entanglement) 比率での最終合成
     merged = (
         blended.float() * _QUANTUM_ENTANGLEMENT
-        + (
-            a.float() * (1 - _QUANTUM_ENTANGLEMENT)
-            + b.float() * (1 - _QUANTUM_ENTANGLEMENT)
-        )
-        / 2.0
+        + (a.float() * (1 - _QUANTUM_ENTANGLEMENT) + b.float() * (1 - _QUANTUM_ENTANGLEMENT)) / 2.0
     ).to(a.dtype)
 
     return merged
@@ -139,13 +125,8 @@ class QuantumCLIPExtractor:
         components = {"clip_g": {}, "clip_l": {}}
 
         for key in state_dict:
-            clean_key = key.replace("conditioner.embedders.0.", "").replace(
-                "cond_stage_model.", ""
-            )
-            if (
-                "text_model.encoder.layers.23" in clean_key
-                or "text_projection" in clean_key
-            ):
+            clean_key = key.replace("conditioner.embedders.0.", "").replace("cond_stage_model.", "")
+            if "text_model.encoder.layers.23" in clean_key or "text_projection" in clean_key:
                 components["clip_g"][clean_key] = state_dict[key]
             elif "text_model.encoder.layers" in clean_key:
                 components["clip_l"][clean_key] = state_dict[key]
@@ -224,18 +205,14 @@ def pre_config_quantum_setup(config: dict) -> dict:
         return config
 
     if not os.path.exists(clip_source_path):
-        logging.warning(
-            f"QuantumMerge: CLIP抽出用モデルが見つかりません: {clip_source_path}"
-        )
+        logging.warning(f"QuantumMerge: CLIP抽出用モデルが見つかりません: {clip_source_path}")
         return config
 
     try:
         from transformers import CLIPTokenizer
         import torch.nn as nn
 
-        logging.info(
-            "QuantumMerge: CLIPモデルを抽出・ロードし、プロンプト特徴量を計算します..."
-        )
+        logging.info("QuantumMerge: CLIPモデルを抽出・ロードし、プロンプト特徴量を計算します...")
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         text_encoder = load_custom_clip(clip_source_path)
@@ -264,9 +241,7 @@ def pre_config_quantum_setup(config: dict) -> dict:
             if device == "cuda":
                 text_emb = text_emb.half()
 
-            _QUANTUM_HYPER_OUT = (
-                hypernet(text_emb).float().cpu()
-            )  # メモリ節約のためCPU退避
+            _QUANTUM_HYPER_OUT = hypernet(text_emb).float().cpu()  # メモリ節約のためCPU退避
 
         logging.info("QuantumMerge: 特徴量の計算が完了しました。")
 
@@ -297,15 +272,39 @@ def post_merge_add_vpred(config: dict, output_path: str):
 
     logging.info("QuantumMerge: 出力モデルに v_pred テンソルを追加します...")
     try:
-        from safetensors.torch import load_file, save_file
+        from safetensors.torch import save_file
+        from safetensors import safe_open
 
-        state_dict = load_file(output_path, device="cpu")
-
-        # v_pred の追加
-        state_dict["v_pred"] = torch.tensor([])
-
+        # Use lazy loading with safe_open and yield tensors one by one
+        # to prevent loading the entire model into RAM at once
         vpred_path = output_path.replace(".safetensors", "_s.safetensors")
-        save_file(state_dict, vpred_path)
+
+        with safe_open(output_path, framework="pt", device="cpu") as f:
+            metadata = f.metadata() or {}
+
+            # create a generator/dictionary-like object that yields tensors
+            class LazyDict(dict):
+                def keys(self) -> list:  # type: ignore
+                    return list(f.keys()) + ["v_pred"]
+
+                def items(self):  # type: ignore
+                    for k in f.keys():
+                        yield k, f.get_tensor(k)
+                    yield "v_pred", torch.tensor([])
+
+                def __getitem__(self, key):
+                    if key == "v_pred":
+                        return torch.tensor([])
+                    return f.get_tensor(key)
+
+                def __iter__(self):
+                    return iter(self.keys())
+
+                def __len__(self):
+                    return len(f.keys()) + 1
+
+            lazy_tensors = LazyDict()
+            save_file(lazy_tensors, vpred_path, metadata=metadata)
 
         # 元のファイルを削除してリネーム（置換）するか、別ファイルとして残すか
         # 元実装に合わせ別名保存後、元の出力ファイルを削除する

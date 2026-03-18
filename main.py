@@ -6,6 +6,20 @@ import argparse
 from typing import Sequence
 
 import torch
+
+# Patch torch.load to default to mmap=True to prevent RAM spikes
+# when sd_mecha or other scripts read PyTorch pickle files (.pt / .ckpt).
+_original_torch_load = torch.load
+
+
+def _patched_torch_load(*args, **kwargs):
+    kwargs.setdefault("mmap", True)
+    kwargs.setdefault("weights_only", True)
+    return _original_torch_load(*args, **kwargs)
+
+
+torch.load = _patched_torch_load
+
 import sd_mecha
 from rich.console import Console
 
@@ -72,9 +86,7 @@ def _get_sd_mecha_merge_log_level() -> int:
     return logging.INFO
 
 
-def _add_debug_argument(
-    parser: argparse.ArgumentParser, *, default: object = False
-) -> None:
+def _add_debug_argument(parser: argparse.ArgumentParser, *, default: object = False) -> None:
     parser.add_argument(
         "-d",
         "--debug",
@@ -95,9 +107,7 @@ def _validate_merge_inputs(models: list[dict], recipe) -> None:
     if models:
         return
     if recipe is not None:
-        logger.info(
-            "models が未指定のため、target_model に対して pre-merge 拡張のみを適用します。"
-        )
+        logger.info("models が未指定のため、target_model に対して pre-merge 拡張のみを適用します。")
         return
 
     logger.error("設定ファイルにモデルが指定されていません。")
@@ -302,18 +312,14 @@ def _add_ui_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _create_legacy_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="モデルの差分計算とマージツール (sd-mecha版)"
-    )
+    parser = argparse.ArgumentParser(description="モデルの差分計算とマージツール (sd-mecha版)")
     _add_merge_arguments(parser)
     _add_debug_argument(parser)
     return parser
 
 
 def _create_subcommand_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="モデルの差分計算とマージツール (sd-mecha版)"
-    )
+    parser = argparse.ArgumentParser(description="モデルの差分計算とマージツール (sd-mecha版)")
     _add_debug_argument(parser)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -390,9 +396,7 @@ def _dispatch_cli_command(args: argparse.Namespace) -> int:
     raise ConfigError(f"未知のコマンドです: {args.command}")
 
 
-def run_merge_pipeline(
-    raw_config: dict, default_output_dir: str = "./merged"
-) -> str | None:
+def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -> str | None:
     """設定辞書を受け取り、マージ処理を実行する。
     戻り値: マージされたモデルのファイルパス。save_model が False の場合は一時ファイルのパス。
     """
@@ -441,9 +445,7 @@ def run_merge_pipeline(
                     "target_model と key_patterns の両方が未指定です。どちらかを指定してください。"
                 )
                 raise ConfigError("target_model と key_patterns の両方が未指定です。")
-            logger.error(
-                'key_patterns の指定は必須です。(全キーを指定する場合は "." 等を指定)'
-            )
+            logger.error('key_patterns の指定は必須です。(全キーを指定する場合は "." 等を指定)')
             raise ConfigError("key_patterns の指定は必須です。")
 
         calc_func = get_calculation_strategy(strategy_name, replace_with)
