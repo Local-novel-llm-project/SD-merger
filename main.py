@@ -106,7 +106,7 @@ def _build_initial_recipe(config: dict):
 
     wrapper = load_model(target_model_path, lazy_load=lazy_load)
     model_dict = wrapper._d
-    return sd_mecha.model(model_dict), wrapper.config, target_model_path
+    return sd_mecha.model(model_dict), getattr(wrapper, "config", None), target_model_path
 
 
 def _validate_merge_inputs(models: list[dict], recipe) -> None:
@@ -198,6 +198,15 @@ def _resolve_output_path(
         os.makedirs(default_output_dir, exist_ok=True)
 
     return True, output_path
+
+
+def _merge_recipe(recipe, *, output_path: str | None, dtype):
+    try:
+        return sd_mecha.merge(recipe, output_dtype=dtype, output=output_path)
+    except TypeError as exc:
+        if "output_dtype" not in str(exc):
+            raise
+        return sd_mecha.merge(recipe, output=output_path)
 
 
 def _build_clip_overrides_from_args(args: argparse.Namespace) -> dict[str, float]:
@@ -448,7 +457,7 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
 
         left_wrapper = load_model(model_config["left"], lazy_load=lazy_load)
         if final_config is None:
-            final_config = left_wrapper.config
+            final_config = getattr(left_wrapper, "config", None)
         left_dict = left_wrapper._d
 
         right_wrapper = load_model(model_config["right"], lazy_load=lazy_load)
@@ -555,8 +564,8 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
         logger.info(f"マージ処理を実行し、{output_path} に sharded 形式で保存します...")
         logger.info("sd-mecha がインメモリマージを開始します。")
         try:
-            # The output=None tells sd-mecha to return the merged state_dict in memory
-            state_dict = sd_mecha.merge(recipe, output_dtype=dtype, output=None)
+            # output=None tells sd-mecha to return the merged state_dict in memory.
+            state_dict = _merge_recipe(recipe, output_path=None, dtype=dtype)
         except Exception as e:
             logger.error(f"sd-mecha merging error: {e}")
             from module.exceptions import MergeError
@@ -578,7 +587,7 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
         logger.info(f"マージ処理を実行し、{output_path} に保存します...")
         logger.info("sd-mecha がストリーミング処理を開始します。")
         try:
-            sd_mecha.merge(recipe, output_dtype=dtype, output=output_path)
+            _merge_recipe(recipe, output_path=output_path, dtype=dtype)
         except Exception as e:
             logger.error(f"sd-mecha merging error: {e}")
             from module.exceptions import MergeError
