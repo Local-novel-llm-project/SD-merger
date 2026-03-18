@@ -12,6 +12,15 @@ def _patch_merge_pipeline_dependencies(monkeypatch, calls: dict):
         calls["model_path"] = path
         return f"recipe::{path}"
 
+    class FakeSDKeyWrapper:
+        def __init__(self, path):
+            self._d = path
+
+    def fake_load_model(path, lazy_load=True, use_sdxl_keys=None):
+        return FakeSDKeyWrapper(path)
+
+    monkeypatch.setattr("module.utility.load_model", fake_load_model)
+
     def fake_merge(recipe, output):
         calls["merged_recipe"] = recipe
         calls["output"] = output
@@ -22,6 +31,10 @@ def _patch_merge_pipeline_dependencies(monkeypatch, calls: dict):
         return f"tuned::{recipe}"
 
     monkeypatch.setattr(main.sd_mecha, "model", fake_model)
+    class FakeSDKeyWrapper:
+        def __init__(self, path):
+            self._d = path
+    monkeypatch.setattr("module.utility.load_model", lambda path, lazy_load=True, use_sdxl_keys=None: FakeSDKeyWrapper(path))
     monkeypatch.setattr(main.sd_mecha, "merge", fake_merge)
     monkeypatch.setattr(main, "run_pre_merge_hooks", fake_pre_merge)
 
@@ -134,6 +147,10 @@ def test_run_merge_pipeline_uses_default_target_strategy_when_omitted(monkeypatc
         return lambda *args, **kwargs: "unused-target-node"
 
     monkeypatch.setattr(main.sd_mecha, "model", fake_model)
+    class FakeSDKeyWrapper:
+        def __init__(self, path):
+            self._d = path
+    monkeypatch.setattr("module.utility.load_model", lambda path, lazy_load=True, use_sdxl_keys=None: FakeSDKeyWrapper(path))
     monkeypatch.setattr(main.sd_mecha, "merge", lambda recipe, output: calls.update({"output": output, "merged_recipe": recipe}))
     monkeypatch.setattr(main, "get_calculation_strategy", fake_calc_strategy)
     monkeypatch.setattr(main, "get_target_calculation_strategy", fake_target_strategy)

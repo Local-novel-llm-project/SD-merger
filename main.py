@@ -100,7 +100,11 @@ def _build_initial_recipe(config: dict):
     target_model_path = config.get("target_model")
     if not target_model_path:
         return None, None
-    return sd_mecha.model(target_model_path), target_model_path
+    
+    lazy_load = config.get("lazy_load", True)
+    from module.utility import load_model
+    model_dict = load_model(target_model_path, lazy_load=lazy_load)._d
+    return sd_mecha.model(model_dict), target_model_path
 
 
 def _validate_merge_inputs(models: list[dict], recipe) -> None:
@@ -229,6 +233,9 @@ def _add_merge_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "-o", "--output", type=str, default="./merged", help="出力ディレクトリのパス"
+    )
+    parser.add_argument(
+        "--no-lazy", action="store_true", help="Lazy Load (遅延読み込み) を無効にし、全モデルをメモリに読み込む"
     )
 
 
@@ -361,7 +368,10 @@ def _parse_cli_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def _run_merge_command(args: argparse.Namespace) -> str | None:
     _ensure_extensions_loaded()
-    return run_from_config_file(args.config, args.output)
+    raw_config = load_yaml_config(args.config)
+    if getattr(args, "no_lazy", False):
+        raw_config["lazy_load"] = False
+    return run_merge_pipeline(raw_config, default_output_dir=args.output)
 
 
 def _run_tune_command(args: argparse.Namespace) -> str | None:
@@ -417,8 +427,12 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
     _validate_merge_inputs(models, recipe)
 
     for model_config in models:
-        left_node = sd_mecha.model(model_config["left"])
-        right_node = sd_mecha.model(model_config["right"])
+        lazy_load = config.get("lazy_load", True)
+        from module.utility import load_model
+        left_dict = load_model(model_config["left"], lazy_load=lazy_load)._d
+        right_dict = load_model(model_config["right"], lazy_load=lazy_load)._d
+        left_node = sd_mecha.model(left_dict)
+        right_node = sd_mecha.model(right_dict)
         target_velocity = model_config.get("velocity", 1.0)
         left_right_velocity = model_config.get("left_right_velocity", 1.0)
         strategy_name = _resolve_model_strategy_name(

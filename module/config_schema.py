@@ -65,6 +65,7 @@ class MergeConfig(BaseModel):
     save_model: bool = True
     device: str = "cpu"
     dtype: str = "float16"
+    lazy_load: bool = True
     bake_in_vae: Optional[str] = None
     extensions: Optional[Dict[str, Any]] = None
 
