@@ -214,7 +214,7 @@ _MERGE_RETRYABLE_FAILURE = object()
 
 
 def _build_merge_strategies(*, dtype, output_path: str | None):
-    return (
+    strategies = (
         {
             "merge_dtype": dtype,
             "output_device": None,
@@ -234,6 +234,11 @@ def _build_merge_strategies(*, dtype, output_path: str | None):
         },
     )
 
+    if output_path is None:
+        return (*strategies, {})
+
+    return strategies
+
 
 def _try_merge_with_strategies(recipe, merge_strategies):
     last_retryable_error: Exception | None = None
@@ -245,7 +250,7 @@ def _try_merge_with_strategies(recipe, merge_strategies):
         except TypeError as exc:
             unsupported_args = [
                 arg_name
-                for arg_name in ("merge_dtype", "output_device", "output_dtype")
+                for arg_name in ("merge_dtype", "output_device", "output_dtype", "output")
                 if arg_name in kwargs and _is_unexpected_kwarg_error(exc, arg_name)
             ]
             if unsupported_args:

@@ -325,6 +325,59 @@ def test_merge_recipe_retries_with_in_memory_output_after_streaming_key_error(mo
     ]
 
 
+
+def test_merge_recipe_uses_kwargless_call_when_output_none_still_triggers_cast_key_error(monkeypatch):
+    calls = []
+
+    def fake_merge(recipe, **kwargs):
+        calls.append(kwargs)
+        if kwargs:
+            raise KeyError("MergeRecipeNode(method=cast, inputs=3 args, 0 kwargs)")
+        return {"weight": "tensor"}
+
+    monkeypatch.setattr(main.sd_mecha, "merge", fake_merge)
+
+    result = main._merge_recipe("recipe", output_path="recover.safetensors", dtype="fp16")
+
+    assert result == {"weight": "tensor"}
+    assert calls == [
+        {
+            "merge_dtype": "fp16",
+            "output_device": None,
+            "output_dtype": None,
+            "output": "recover.safetensors",
+        },
+        {
+            "merge_dtype": "fp16",
+            "output": "recover.safetensors",
+        },
+        {
+            "output_dtype": "fp16",
+            "output": "recover.safetensors",
+        },
+        {
+            "output": "recover.safetensors",
+        },
+        {
+            "merge_dtype": "fp16",
+            "output_device": None,
+            "output_dtype": None,
+            "output": None,
+        },
+        {
+            "merge_dtype": "fp16",
+            "output": None,
+        },
+        {
+            "output_dtype": "fp16",
+            "output": None,
+        },
+        {
+            "output": None,
+        },
+        {},
+    ]
+
 def test_run_merge_pipeline_saves_in_memory_fallback_for_non_sharded(monkeypatch):
     calls = {}
     _patch_merge_pipeline_dependencies(monkeypatch, calls)

@@ -81,25 +81,78 @@ def build_iteration_plan(
     return stages
 
 
-def build_poison_merge_config(
-    base_model: str, lora_model: str, alpha: float, output_name: str
-) -> Dict[str, Any]:
-    """Poison Merge の 1 ステップ分のマージ設定を生成する。"""
-    return {
-        "target_model": base_model,
-        "models": [
-            {
-                "left": base_model,
-                "right": lora_model,
-                "strategy": "replace",
-                "replace_with": "right",
-                "target_strategy": "addition",
-                "velocity": float(alpha),
-                "key_patterns": ["."],
-            }
-        ],
-        "output_name": output_name,
+def resolve_lora_merge_precision(dtype_name: str | None) -> str:
+    """sd-merger の dtype 名を kohya の precision 名へ変換する。"""
+    precision_map = {
+        "float16": "fp16",
+        "float32": "float",
+        "bfloat16": "bf16",
     }
+    return precision_map.get(str(dtype_name or "float32"), "float")
+
+
+def infer_model_is_sdxl(model_path: str) -> bool:
+    """ベース checkpoint のキー構造から SDXL かどうかを判定する。"""
+    from module.utility import load_model
+
+    wrapper = load_model(model_path, lazy_load=True)
+    return bool(getattr(wrapper, "is_xl", False))
+
+
+def build_poison_lora_apply_operation(
+    base_model: str,
+    lora_model: str,
+    alpha: float,
+    output_path: str,
+    *,
+    sdxl: bool,
+    precision: str,
+    save_precision: str,
+    v2: bool = False,
+    no_metadata: bool = False,
+) -> Dict[str, Any]:
+    """Poison Merge の 1 ステージ分を lora_ops apply 用オペレーションへ変換する。"""
+    return {
+        "type": "apply",
+        "sd_model": base_model,
+        "models": [lora_model],
+        "ratios": [float(alpha)],
+        "output": output_path,
+        "sdxl": bool(sdxl),
+        "precision": precision,
+        "save_precision": save_precision,
+        "v2": bool(v2),
+        "no_metadata": bool(no_metadata),
+    }
+
+
+def apply_lora_stage(
+    base_model: str,
+    lora_model: str,
+    alpha: float,
+    output_path: str,
+    *,
+    sdxl: bool,
+    precision: str,
+    save_precision: str,
+    v2: bool = False,
+    no_metadata: bool = False,
+) -> str:
+    """既存の lora_ops 実装を使って checkpoint へ LoRA を適用する。"""
+    from extensions import lora_ops
+
+    operation = build_poison_lora_apply_operation(
+        base_model,
+        lora_model,
+        alpha,
+        output_path,
+        sdxl=sdxl,
+        precision=precision,
+        save_precision=save_precision,
+        v2=v2,
+        no_metadata=no_metadata,
+    )
+    return lora_ops._run_merge_lora(operation)
 
 
 def run_poison_merge(
@@ -108,11 +161,10 @@ def run_poison_merge(
     """Poison Merge のメインイテレーションを実行する。
 
     各イテレーションで以下の処理を行う:
-    1. Base モデルに LoRA を適用 (alphaを指定)
+    1. Base モデルへ LoRA を適用
     2. 画像を生成して保存
-    3. [次ステップへ] 出力されたマージ済みモデルを新たなBaseとして続行
+    3. 出力されたマージ済みモデルを次ステップの Base として続行
     """
-    from main import main as merger_main
     from module.generation import generate_first_image
     from PIL import Image, ImageDraw
 
@@ -127,6 +179,15 @@ def run_poison_merge(
     prompt = p_config.get("prompt", "A beautiful landscape")
     negative_prompt = p_config.get("negative_prompt", "blurry")
     seed = p_config.get("seed", -1)
+
+    precision = p_config.get("precision") or resolve_lora_merge_precision(config.get("dtype"))
+    save_precision = p_config.get("save_precision") or precision
+    if "sdxl" in p_config:
+        is_sdxl = bool(p_config.get("sdxl"))
+    else:
+        is_sdxl = infer_model_is_sdxl(base_model)
+    v2 = bool(p_config.get("v2", False))
+    no_metadata = bool(p_config.get("no_metadata", False))
 
     alphas = calculate_alphas(initial_alpha, iterations, decay_type)
     if not lora_models:
@@ -150,6 +211,10 @@ def run_poison_merge(
 
     logging.info(f"[{task_name}] Target Alphas: {alphas}")
     logging.info(f"[{task_name}] LoRAs: {lora_models}")
+    logging.info(
+        f"[{task_name}] LoRA apply mode: family={'SDXL' if is_sdxl else 'SD1/SD2'}, "
+        f"precision={precision}, save_precision={save_precision}"
+    )
 
     os.makedirs(output_dir, exist_ok=True)
     images = []
@@ -173,29 +238,21 @@ def run_poison_merge(
 
         try:
             for stage_index, stage in enumerate(iteration_plan, start=1):
-                import tempfile
-                import yaml
-
-                merge_config = build_poison_merge_config(
+                logging.info(
+                    f"[{task_name}] Step {i + 1}.{stage_index}/{len(iteration_plan)} "
+                    f"Applying LoRA: {stage['right']}"
+                )
+                apply_lora_stage(
                     stage["left"],
                     stage["right"],
                     stage["alpha"],
-                    stage["output_name"],
+                    stage["output_path"],
+                    sdxl=is_sdxl,
+                    precision=precision,
+                    save_precision=save_precision,
+                    v2=v2,
+                    no_metadata=no_metadata,
                 )
-
-                with tempfile.NamedTemporaryFile("w", delete=False, suffix=".yaml") as f:
-                    yaml.dump(merge_config, f)
-                    tmp_cfg = f.name
-
-                try:
-                    logging.info(
-                        f"[{task_name}] Step {i + 1}.{stage_index}/{len(iteration_plan)} "
-                        f"Applying LoRA: {stage['right']}"
-                    )
-                    merger_main(tmp_cfg, output_dir)
-                finally:
-                    if os.path.exists(tmp_cfg):
-                        os.remove(tmp_cfg)
 
                 if not os.path.exists(stage["output_path"]):
                     raise FileNotFoundError(
