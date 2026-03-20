@@ -175,3 +175,58 @@ def test_run_merge_pipeline_uses_default_target_strategy_when_omitted(monkeypatc
     assert calls["target_strategy"] == "addition"
     assert calls["merged_recipe"] == "scaled::diff-node::0.5"
     assert output_path.endswith("default_target_strategy.safetensors")
+
+
+def test_merge_recipe_uses_castless_output_call_first(monkeypatch):
+    calls = []
+
+    def fake_merge(recipe, **kwargs):
+        calls.append(kwargs)
+        return "ok"
+
+    monkeypatch.setattr(main.sd_mecha, "merge", fake_merge)
+
+    result = main._merge_recipe("recipe", output_path="merged.safetensors", dtype="fp16")
+
+    assert result == "ok"
+    assert calls == [
+        {
+            "merge_dtype": "fp16",
+            "output_device": None,
+            "output_dtype": None,
+            "output": "merged.safetensors",
+        }
+    ]
+
+
+def test_merge_recipe_falls_back_for_legacy_sd_mecha(monkeypatch):
+    calls = []
+
+    def fake_merge(recipe, **kwargs):
+        calls.append(kwargs)
+        if "merge_dtype" in kwargs:
+            raise TypeError("merge() got an unexpected keyword argument 'merge_dtype'")
+        if "output_dtype" in kwargs:
+            raise TypeError("merge() got an unexpected keyword argument 'output_dtype'")
+        return "legacy-ok"
+
+    monkeypatch.setattr(main.sd_mecha, "merge", fake_merge)
+
+    result = main._merge_recipe("recipe", output_path="legacy.safetensors", dtype="fp16")
+
+    assert result == "legacy-ok"
+    assert calls == [
+        {
+            "merge_dtype": "fp16",
+            "output_device": None,
+            "output_dtype": None,
+            "output": "legacy.safetensors",
+        },
+        {
+            "output_dtype": "fp16",
+            "output": "legacy.safetensors",
+        },
+        {
+            "output": "legacy.safetensors",
+        },
+    ]

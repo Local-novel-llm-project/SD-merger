@@ -200,11 +200,34 @@ def _resolve_output_path(
     return True, output_path
 
 
+def _is_unexpected_kwarg_error(exc: TypeError, arg_name: str) -> bool:
+    message = str(exc)
+    return "unexpected keyword argument" in message and f"'{arg_name}'" in message
+
+
 def _merge_recipe(recipe, *, output_path: str | None, dtype):
+    # NOTE:
+    # Some sd-mecha versions fail when the root recipe is auto-wrapped by cast()
+    # via output_device/output_dtype defaults. We avoid that path first.
+    try:
+        return sd_mecha.merge(
+            recipe,
+            merge_dtype=dtype,
+            output_device=None,
+            output_dtype=None,
+            output=output_path,
+        )
+    except TypeError as exc:
+        if not any(
+            _is_unexpected_kwarg_error(exc, arg)
+            for arg in ("merge_dtype", "output_device", "output_dtype")
+        ):
+            raise
+
     try:
         return sd_mecha.merge(recipe, output_dtype=dtype, output=output_path)
     except TypeError as exc:
-        if "output_dtype" not in str(exc):
+        if not _is_unexpected_kwarg_error(exc, "output_dtype"):
             raise
         return sd_mecha.merge(recipe, output=output_path)
 
