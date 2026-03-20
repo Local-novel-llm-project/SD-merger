@@ -53,32 +53,23 @@ def build_iteration_plan(
     iteration: int,
     alpha: float,
 ) -> List[Dict[str, Any]]:
-    """1 イテレーション内で実行する LoRA 適用順を組み立てる。"""
-    stages: List[Dict[str, Any]] = []
-    stage_base = current_base
+    """1 イテレーション分の LoRA 適用計画を組み立てる。"""
+    if not lora_models:
+        return []
 
-    for lora_index, lora_model in enumerate(lora_models, start=1):
-        is_last_lora = lora_index == len(lora_models)
-        if is_last_lora:
-            output_name = f"poison_step_{iteration}_alpha_{alpha:.2f}.safetensors"
-        else:
-            output_name = (
-                f"poison_step_{iteration}_lora_{lora_index}_alpha_{alpha:.2f}.safetensors"
-            )
-        output_path = os.path.join(output_dir, output_name)
+    output_name = f"poison_step_{iteration}_alpha_{alpha:.2f}.safetensors"
+    output_path = os.path.join(output_dir, output_name)
 
-        stages.append(
-            {
-                "left": stage_base,
-                "right": lora_model,
-                "alpha": float(alpha),
-                "output_name": output_name,
-                "output_path": output_path,
-            }
-        )
-        stage_base = output_path
-
-    return stages
+    return [
+        {
+            "left": current_base,
+            "models": list(lora_models),
+            "ratios": [float(alpha)] * len(lora_models),
+            "alpha": float(alpha),
+            "output_name": output_name,
+            "output_path": output_path,
+        }
+    ]
 
 
 def resolve_lora_merge_precision(dtype_name: str | None) -> str:
@@ -101,8 +92,8 @@ def infer_model_is_sdxl(model_path: str) -> bool:
 
 def build_poison_lora_apply_operation(
     base_model: str,
-    lora_model: str,
-    alpha: float,
+    lora_models: List[str],
+    ratios: List[float],
     output_path: str,
     *,
     sdxl: bool,
@@ -111,12 +102,12 @@ def build_poison_lora_apply_operation(
     v2: bool = False,
     no_metadata: bool = False,
 ) -> Dict[str, Any]:
-    """Poison Merge の 1 ステージ分を lora_ops apply 用オペレーションへ変換する。"""
+    """Poison Merge の 1 イテレーション分を lora_ops apply 用オペレーションへ変換する。"""
     return {
         "type": "apply",
         "sd_model": base_model,
-        "models": [lora_model],
-        "ratios": [float(alpha)],
+        "models": list(lora_models),
+        "ratios": [float(ratio) for ratio in ratios],
         "output": output_path,
         "sdxl": bool(sdxl),
         "precision": precision,
@@ -128,8 +119,8 @@ def build_poison_lora_apply_operation(
 
 def apply_lora_stage(
     base_model: str,
-    lora_model: str,
-    alpha: float,
+    lora_models: List[str],
+    ratios: List[float],
     output_path: str,
     *,
     sdxl: bool,
@@ -138,13 +129,13 @@ def apply_lora_stage(
     v2: bool = False,
     no_metadata: bool = False,
 ) -> str:
-    """既存の lora_ops 実装を使って checkpoint へ LoRA を適用する。"""
+    """既存の lora_ops 実装を使って checkpoint へ LoRA 群を一括適用する。"""
     from extensions import lora_ops
 
     operation = build_poison_lora_apply_operation(
         base_model,
-        lora_model,
-        alpha,
+        lora_models,
+        ratios,
         output_path,
         sdxl=sdxl,
         precision=precision,
@@ -240,12 +231,12 @@ def run_poison_merge(
             for stage_index, stage in enumerate(iteration_plan, start=1):
                 logging.info(
                     f"[{task_name}] Step {i + 1}.{stage_index}/{len(iteration_plan)} "
-                    f"Applying LoRA: {stage['right']}"
+                    f"Applying {len(stage['models'])} LoRAs to base checkpoint."
                 )
                 apply_lora_stage(
                     stage["left"],
-                    stage["right"],
-                    stage["alpha"],
+                    stage["models"],
+                    stage["ratios"],
                     stage["output_path"],
                     sdxl=is_sdxl,
                     precision=precision,

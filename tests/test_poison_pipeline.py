@@ -27,7 +27,7 @@ def test_normalize_lora_models_prefers_multi_select_list():
     ]
 
 
-def test_build_iteration_plan_chains_multiple_loras():
+def test_build_iteration_plan_batches_multiple_loras_into_single_output():
     plan = build_iteration_plan(
         current_base="models/base.safetensors",
         lora_models=["loras/a.safetensors", "loras/b.safetensors"],
@@ -36,13 +36,11 @@ def test_build_iteration_plan_chains_multiple_loras():
         alpha=0.75,
     )
 
-    assert len(plan) == 2
+    assert len(plan) == 1
     assert plan[0]["left"] == "models/base.safetensors"
-    assert plan[0]["right"] == "loras/a.safetensors"
-    assert plan[0]["output_name"] == "poison_step_2_lora_1_alpha_0.75.safetensors"
-    assert plan[1]["left"] == plan[0]["output_path"]
-    assert plan[1]["right"] == "loras/b.safetensors"
-    assert plan[1]["output_name"] == "poison_step_2_alpha_0.75.safetensors"
+    assert plan[0]["models"] == ["loras/a.safetensors", "loras/b.safetensors"]
+    assert plan[0]["ratios"] == [0.75, 0.75]
+    assert plan[0]["output_name"] == "poison_step_2_alpha_0.75.safetensors"
 
 
 def test_resolve_lora_merge_precision_maps_supported_dtypes():
@@ -55,8 +53,8 @@ def test_resolve_lora_merge_precision_maps_supported_dtypes():
 def test_build_poison_lora_apply_operation_uses_lora_ops_apply_shape():
     operation = poison.build_poison_lora_apply_operation(
         "models/base.safetensors",
-        "loras/style.safetensors",
-        0.6,
+        ["loras/style_a.safetensors", "loras/style_b.safetensors"],
+        [0.6, 0.6],
         "output/merged.safetensors",
         sdxl=True,
         precision="fp16",
@@ -68,8 +66,8 @@ def test_build_poison_lora_apply_operation_uses_lora_ops_apply_shape():
     assert operation == {
         "type": "apply",
         "sd_model": "models/base.safetensors",
-        "models": ["loras/style.safetensors"],
-        "ratios": [0.6],
+        "models": ["loras/style_a.safetensors", "loras/style_b.safetensors"],
+        "ratios": [0.6, 0.6],
         "output": "output/merged.safetensors",
         "sdxl": True,
         "precision": "fp16",
@@ -79,7 +77,7 @@ def test_build_poison_lora_apply_operation_uses_lora_ops_apply_shape():
     }
 
 
-def test_run_poison_merge_applies_lora_stages_via_lora_ops(monkeypatch, tmp_path):
+def test_run_poison_merge_applies_all_loras_in_single_stage_via_lora_ops(monkeypatch, tmp_path):
     output_dir = tmp_path / "poison_out"
     apply_calls = []
 
@@ -121,8 +119,8 @@ def test_run_poison_merge_applies_lora_stages_via_lora_ops(monkeypatch, tmp_path
 
     def fake_apply_lora_stage(
         base_model,
-        lora_model,
-        alpha,
+        lora_models,
+        ratios,
         output_path,
         *,
         sdxl,
@@ -134,8 +132,8 @@ def test_run_poison_merge_applies_lora_stages_via_lora_ops(monkeypatch, tmp_path
         apply_calls.append(
             {
                 "base_model": base_model,
-                "lora_model": lora_model,
-                "alpha": alpha,
+                "lora_models": lora_models,
+                "ratios": ratios,
                 "output_path": output_path,
                 "sdxl": sdxl,
                 "precision": precision,
@@ -154,7 +152,10 @@ def test_run_poison_merge_applies_lora_stages_via_lora_ops(monkeypatch, tmp_path
         "dtype": "float16",
         "poison_merge": {
             "base_model": "models/base.safetensors",
-            "lora_models": ["loras/style.safetensors"],
+            "lora_models": [
+                "loras/style_a.safetensors",
+                "loras/style_b.safetensors",
+            ],
             "iterations": 1,
             "initial_alpha": 0.75,
             "output_dir": str(output_dir),
@@ -171,8 +172,11 @@ def test_run_poison_merge_applies_lora_stages_via_lora_ops(monkeypatch, tmp_path
     assert apply_calls == [
         {
             "base_model": "models/base.safetensors",
-            "lora_model": "loras/style.safetensors",
-            "alpha": 0.75,
+            "lora_models": [
+                "loras/style_a.safetensors",
+                "loras/style_b.safetensors",
+            ],
+            "ratios": [0.75, 0.75],
             "output_path": str(expected_output),
             "sdxl": True,
             "precision": "fp16",

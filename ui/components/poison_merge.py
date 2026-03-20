@@ -59,7 +59,7 @@ def render_poison_merge_tab():
                 """
             1. Select a Base Checkpoint and one or more LoRAs.
             2. Choose how many repetitions you want to perform.
-            3. Each iteration applies the selected LoRAs in order with the same decaying alpha, using the output of the previous stage as the next input.
+            3. Each iteration applies the selected LoRAs together with the same decaying alpha, using the previous iteration output as the next input.
             4. Images are generated locally at each step to help you evaluate the result.
             5. Since this runs in the Tasks Queue, check the *Tasks Queue* tab for live progress.
             """
