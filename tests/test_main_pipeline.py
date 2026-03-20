@@ -269,3 +269,92 @@ def test_merge_recipe_retries_on_sd_mecha_node_key_error(monkeypatch):
             "output": "recover.safetensors",
         },
     ]
+
+
+def test_merge_recipe_retries_with_in_memory_output_after_streaming_key_error(monkeypatch):
+    calls = []
+
+    def fake_merge(recipe, **kwargs):
+        calls.append(kwargs)
+        if kwargs.get("output") is not None:
+            raise KeyError("MergeRecipeNode(method=cast, inputs=3 args, 0 kwargs)")
+        if "merge_dtype" in kwargs or "output_dtype" in kwargs:
+            raise KeyError("MergeRecipeNode(method=cast, inputs=3 args, 0 kwargs)")
+        return {"weight": "tensor"}
+
+    monkeypatch.setattr(main.sd_mecha, "merge", fake_merge)
+
+    result = main._merge_recipe("recipe", output_path="recover.safetensors", dtype="fp16")
+
+    assert result == {"weight": "tensor"}
+    assert calls == [
+        {
+            "merge_dtype": "fp16",
+            "output_device": None,
+            "output_dtype": None,
+            "output": "recover.safetensors",
+        },
+        {
+            "merge_dtype": "fp16",
+            "output": "recover.safetensors",
+        },
+        {
+            "output_dtype": "fp16",
+            "output": "recover.safetensors",
+        },
+        {
+            "output": "recover.safetensors",
+        },
+        {
+            "merge_dtype": "fp16",
+            "output_device": None,
+            "output_dtype": None,
+            "output": None,
+        },
+        {
+            "merge_dtype": "fp16",
+            "output": None,
+        },
+        {
+            "output_dtype": "fp16",
+            "output": None,
+        },
+        {
+            "output": None,
+        },
+    ]
+
+
+def test_run_merge_pipeline_saves_in_memory_fallback_for_non_sharded(monkeypatch):
+    calls = {}
+    _patch_merge_pipeline_dependencies(monkeypatch, calls)
+
+    saved = {}
+
+    monkeypatch.setattr(
+        main,
+        "_merge_recipe",
+        lambda recipe, *, output_path, dtype: {"weight": "tensor"},
+    )
+    monkeypatch.setattr(
+        "module.utility.save_model",
+        lambda model, path: saved.update({"model": model, "path": path}),
+    )
+
+    temp_dir = os.path.join(os.getcwd(), ".pytest_tmp_local", str(uuid.uuid4()))
+    os.makedirs(temp_dir, exist_ok=True)
+
+    output_path = main.run_merge_pipeline(
+        {
+            "target_model": "models/base_model.safetensors",
+            "models": [],
+            "output_name": "fallback_saved.safetensors",
+        },
+        default_output_dir=temp_dir,
+    )
+
+    assert output_path == os.path.join(temp_dir, "fallback_saved.safetensors")
+    assert saved == {
+        "model": {"weight": "tensor"},
+        "path": output_path,
+    }

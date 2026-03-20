@@ -210,12 +210,11 @@ def _is_sd_mecha_recipe_key_error(exc: KeyError) -> bool:
     return "MergeRecipeNode(" in message or "ModelRecipeNode(" in message
 
 
-def _merge_recipe(recipe, *, output_path: str | None, dtype):
-    # NOTE:
-    # sd-mecha 1.1.x has environments where one merge signature fails during
-    # graph finalization (KeyError on MergeRecipeNode). Try multiple signatures
-    # from newest to legacy to keep compatibility.
-    merge_strategies = (
+_MERGE_RETRYABLE_FAILURE = object()
+
+
+def _build_merge_strategies(*, dtype, output_path: str | None):
+    return (
         {
             "merge_dtype": dtype,
             "output_device": None,
@@ -235,10 +234,14 @@ def _merge_recipe(recipe, *, output_path: str | None, dtype):
         },
     )
 
+
+def _try_merge_with_strategies(recipe, merge_strategies):
     last_retryable_error: Exception | None = None
+    saw_recipe_node_key_error = False
+
     for kwargs in merge_strategies:
         try:
-            return sd_mecha.merge(recipe, **kwargs)
+            return sd_mecha.merge(recipe, **kwargs), last_retryable_error, saw_recipe_node_key_error
         except TypeError as exc:
             unsupported_args = [
                 arg_name
@@ -251,9 +254,39 @@ def _merge_recipe(recipe, *, output_path: str | None, dtype):
             raise
         except KeyError as exc:
             if _is_sd_mecha_recipe_key_error(exc):
+                saw_recipe_node_key_error = True
                 last_retryable_error = exc
                 continue
             raise
+
+    return _MERGE_RETRYABLE_FAILURE, last_retryable_error, saw_recipe_node_key_error
+
+
+def _merge_recipe(recipe, *, output_path: str | None, dtype):
+    # NOTE:
+    # sd-mecha 1.1.x has environments where one merge signature fails during
+    # graph finalization (KeyError on MergeRecipeNode). Try multiple signatures
+    # from newest to legacy to keep compatibility.
+    result, last_retryable_error, saw_recipe_node_key_error = _try_merge_with_strategies(
+        recipe,
+        _build_merge_strategies(dtype=dtype, output_path=output_path),
+    )
+    if result is not _MERGE_RETRYABLE_FAILURE:
+        return result
+
+    if output_path is not None and saw_recipe_node_key_error:
+        logger.warning(
+            "sd-mecha streaming output failed with recipe-node KeyError. "
+            "Retrying with in-memory output fallback."
+        )
+        fallback_result, fallback_error, _ = _try_merge_with_strategies(
+            recipe,
+            _build_merge_strategies(dtype=dtype, output_path=None),
+        )
+        if fallback_result is not _MERGE_RETRYABLE_FAILURE:
+            return fallback_result
+        if fallback_error is not None:
+            last_retryable_error = fallback_error
 
     if last_retryable_error is not None:
         raise last_retryable_error
@@ -639,7 +672,15 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
         logger.info(f"マージ処理を実行し、{output_path} に保存します...")
         logger.info("sd-mecha がストリーミング処理を開始します。")
         try:
-            _merge_recipe(recipe, output_path=output_path, dtype=dtype)
+            merge_result = _merge_recipe(recipe, output_path=output_path, dtype=dtype)
+            if isinstance(merge_result, dict):
+                logger.warning(
+                    "sd-mecha returned an in-memory state_dict for non-sharded output. "
+                    "Saving via local safetensors fallback."
+                )
+                from module.utility import save_model
+
+                save_model(merge_result, output_path)
         except Exception as e:
             logger.error(f"sd-mecha merging error: {e}")
             from module.exceptions import MergeError
