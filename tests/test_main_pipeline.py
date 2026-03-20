@@ -223,10 +223,49 @@ def test_merge_recipe_falls_back_for_legacy_sd_mecha(monkeypatch):
             "output": "legacy.safetensors",
         },
         {
+            "merge_dtype": "fp16",
+            "output": "legacy.safetensors",
+        },
+        {
             "output_dtype": "fp16",
             "output": "legacy.safetensors",
         },
         {
             "output": "legacy.safetensors",
+        },
+    ]
+
+
+def test_merge_recipe_retries_on_sd_mecha_node_key_error(monkeypatch):
+    calls = []
+
+    def fake_merge(recipe, **kwargs):
+        calls.append(kwargs)
+        if "merge_dtype" in kwargs or "output_dtype" in kwargs:
+            raise KeyError("MergeRecipeNode(method=target_addition, inputs=4 args, 0 kwargs)")
+        return "keyerror-recovered"
+
+    monkeypatch.setattr(main.sd_mecha, "merge", fake_merge)
+
+    result = main._merge_recipe("recipe", output_path="recover.safetensors", dtype="fp16")
+
+    assert result == "keyerror-recovered"
+    assert calls == [
+        {
+            "merge_dtype": "fp16",
+            "output_device": None,
+            "output_dtype": None,
+            "output": "recover.safetensors",
+        },
+        {
+            "merge_dtype": "fp16",
+            "output": "recover.safetensors",
+        },
+        {
+            "output_dtype": "fp16",
+            "output": "recover.safetensors",
+        },
+        {
+            "output": "recover.safetensors",
         },
     ]

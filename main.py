@@ -205,31 +205,60 @@ def _is_unexpected_kwarg_error(exc: TypeError, arg_name: str) -> bool:
     return "unexpected keyword argument" in message and f"'{arg_name}'" in message
 
 
+def _is_sd_mecha_recipe_key_error(exc: KeyError) -> bool:
+    message = str(exc)
+    return "MergeRecipeNode(" in message or "ModelRecipeNode(" in message
+
+
 def _merge_recipe(recipe, *, output_path: str | None, dtype):
     # NOTE:
-    # Some sd-mecha versions fail when the root recipe is auto-wrapped by cast()
-    # via output_device/output_dtype defaults. We avoid that path first.
-    try:
-        return sd_mecha.merge(
-            recipe,
-            merge_dtype=dtype,
-            output_device=None,
-            output_dtype=None,
-            output=output_path,
-        )
-    except TypeError as exc:
-        if not any(
-            _is_unexpected_kwarg_error(exc, arg)
-            for arg in ("merge_dtype", "output_device", "output_dtype")
-        ):
+    # sd-mecha 1.1.x has environments where one merge signature fails during
+    # graph finalization (KeyError on MergeRecipeNode). Try multiple signatures
+    # from newest to legacy to keep compatibility.
+    merge_strategies = (
+        {
+            "merge_dtype": dtype,
+            "output_device": None,
+            "output_dtype": None,
+            "output": output_path,
+        },
+        {
+            "merge_dtype": dtype,
+            "output": output_path,
+        },
+        {
+            "output_dtype": dtype,
+            "output": output_path,
+        },
+        {
+            "output": output_path,
+        },
+    )
+
+    last_retryable_error: Exception | None = None
+    for kwargs in merge_strategies:
+        try:
+            return sd_mecha.merge(recipe, **kwargs)
+        except TypeError as exc:
+            unsupported_args = [
+                arg_name
+                for arg_name in ("merge_dtype", "output_device", "output_dtype")
+                if arg_name in kwargs and _is_unexpected_kwarg_error(exc, arg_name)
+            ]
+            if unsupported_args:
+                last_retryable_error = exc
+                continue
+            raise
+        except KeyError as exc:
+            if _is_sd_mecha_recipe_key_error(exc):
+                last_retryable_error = exc
+                continue
             raise
 
-    try:
-        return sd_mecha.merge(recipe, output_dtype=dtype, output=output_path)
-    except TypeError as exc:
-        if not _is_unexpected_kwarg_error(exc, "output_dtype"):
-            raise
-        return sd_mecha.merge(recipe, output=output_path)
+    if last_retryable_error is not None:
+        raise last_retryable_error
+
+    raise RuntimeError("sd_mecha.merge fallback unexpectedly exhausted.")
 
 
 def _build_clip_overrides_from_args(args: argparse.Namespace) -> dict[str, float]:
