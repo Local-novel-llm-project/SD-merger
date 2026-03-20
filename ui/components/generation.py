@@ -1,6 +1,11 @@
 import gradio as gr
 from module.error_messages import build_user_error_message, build_user_message
 from module.generation import generate_image, clear_model_cache, get_cache_info
+from ui.components.generation_controls import (
+    SAMPLER_CHOICES,
+    SCHEDULER_CHOICES,
+    render_generation_settings_inputs,
+)
 from ui.utils import get_model_list, get_model_path
 
 
@@ -35,59 +40,16 @@ def render_generation_tab():
 
             reload_btn.click(fn=refresh_models, inputs=[], outputs=[model_file])
 
-            prompt = gr.Textbox(
-                label="Prompt",
-                lines=3,
-                value="A beautiful landscape, high quality, highly detailed, 8k resolution, masterpiece",
-            )
-            negative_prompt = gr.Textbox(
-                label="Negative Prompt",
-                lines=2,
-                value="blurry, bad quality, low res, worst quality",
-            )
-
-            with gr.Row():
-                width = gr.Slider(label="Width", minimum=256, maximum=2048, step=64, value=512)
-                height = gr.Slider(label="Height", minimum=256, maximum=2048, step=64, value=512)
-
-            with gr.Row():
-                steps = gr.Slider(label="Steps", minimum=1, maximum=150, step=1, value=20)
-                cfg = gr.Slider(label="CFG Scale", minimum=1.0, maximum=30.0, step=0.5, value=7.0)
-
-            with gr.Row():
-                sampler = gr.Dropdown(
-                    label="Sampler",
-                    choices=[
-                        "euler",
-                        "euler_ancestral",
-                        "heun",
-                        "dpm_2",
-                        "dpm_2_ancestral",
-                        "lms",
-                        "dpm_fast",
-                        "dpm_adaptive",
-                        "dpmpp_2s_ancestral",
-                        "dpmpp_sde",
-                        "dpmpp_2m",
-                        "ddim",
-                        "uni_pc",
-                        "uni_pc_bh2",
-                    ],
-                    value="euler",
-                )
-                scheduler = gr.Dropdown(
-                    label="Scheduler",
-                    choices=[
-                        "normal",
-                        "karras",
-                        "exponential",
-                        "simple",
-                        "ddim_uniform",
-                    ],
-                    value="normal",
-                )
-
-            seed = gr.Number(label="Seed (-1 or 0 for random)", value=-1, precision=0)
+            generation_inputs = render_generation_settings_inputs()
+            prompt = generation_inputs["prompt"]
+            negative_prompt = generation_inputs["negative_prompt"]
+            width = generation_inputs["width"]
+            height = generation_inputs["height"]
+            steps = generation_inputs["steps"]
+            cfg = generation_inputs["cfg"]
+            sampler = generation_inputs["sampler"]
+            scheduler = generation_inputs["scheduler"]
+            seed = generation_inputs["seed"]
 
             generate_btn = gr.Button("Generate", variant="primary")
 
@@ -187,27 +149,12 @@ def render_auto_generate_settings():
                 with gr.Row():
                     ag_sampler = gr.Dropdown(
                         label="Sampler",
-                        choices=[
-                            "euler",
-                            "euler_ancestral",
-                            "heun",
-                            "dpm_2",
-                            "dpm_2_ancestral",
-                            "lms",
-                            "dpm_fast",
-                            "dpm_adaptive",
-                            "dpmpp_2s_ancestral",
-                            "dpmpp_sde",
-                            "dpmpp_2m",
-                            "ddim",
-                            "uni_pc",
-                            "uni_pc_bh2",
-                        ],
+                        choices=SAMPLER_CHOICES,
                         value=auto_generate_config["sampler_name"],
                     )
                     ag_scheduler = gr.Dropdown(
                         label="Scheduler",
-                        choices=["normal", "karras", "exponential", "simple", "ddim_uniform"],
+                        choices=SCHEDULER_CHOICES,
                         value=auto_generate_config["scheduler"],
                     )
 

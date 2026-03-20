@@ -1,7 +1,15 @@
 import os
 import math
+import glob
+import re
 import logging
 from typing import Any, Dict, List
+
+
+POISON_GRID_IMAGE_NAME = "poison_merge_grid.png"
+_POISON_PREVIEW_FILENAME_RE = re.compile(
+    r"poison_step_(\d+)_alpha_([0-9.]+)_preview\.png$"
+)
 
 
 def calculate_alphas(
@@ -46,6 +54,102 @@ def normalize_lora_models(poison_config: Dict[str, Any]) -> List[str]:
     return normalized
 
 
+def parse_alpha_overrides(alpha_overrides_str: str) -> List[float]:
+    return [
+        float(value.strip())
+        for value in str(alpha_overrides_str or "").split(",")
+        if value.strip()
+    ]
+
+
+def resolve_poison_alphas(
+    initial_alpha: float,
+    iterations: int,
+    decay_type: str,
+    alpha_overrides_str: str = "",
+) -> List[float]:
+    alphas = calculate_alphas(initial_alpha, iterations, decay_type)
+    if not alpha_overrides_str:
+        return alphas
+
+    try:
+        overrides = parse_alpha_overrides(alpha_overrides_str)
+    except ValueError:
+        logging.warning(
+            "Invalid alpha overrides format. Falling back to calculated curve."
+        )
+        return alphas
+
+    if overrides:
+        logging.info("Using custom alpha overrides: %s", overrides)
+        return overrides
+
+    return alphas
+
+
+def build_poison_output_name(iteration: int, alpha: float) -> str:
+    return f"poison_step_{iteration}_alpha_{alpha:.2f}.safetensors"
+
+
+def build_poison_preview_name(iteration: int, alpha: float) -> str:
+    return f"poison_step_{iteration}_alpha_{alpha:.2f}_preview.png"
+
+
+def resolve_poison_output_name(poison_config: Dict[str, Any]) -> str:
+    alphas = resolve_poison_alphas(
+        float(poison_config.get("initial_alpha", 1.0)),
+        int(poison_config.get("iterations", 3)),
+        str(poison_config.get("decay_type", "linear")),
+        str(poison_config.get("alpha_overrides", "")),
+    )
+    if not alphas:
+        return "poison_merge.safetensors"
+    return build_poison_output_name(len(alphas), alphas[-1])
+
+
+def _preview_sort_key(path: str) -> tuple[int, str]:
+    match = _POISON_PREVIEW_FILENAME_RE.match(os.path.basename(path))
+    if match is None:
+        return (10**9, os.path.basename(path))
+    return (int(match.group(1)), os.path.basename(path))
+
+
+def _build_preview_tab_label(path: str) -> str:
+    basename = os.path.basename(path)
+    if basename == POISON_GRID_IMAGE_NAME:
+        return "Grid"
+
+    match = _POISON_PREVIEW_FILENAME_RE.match(basename)
+    if match is None:
+        return basename
+
+    step = int(match.group(1))
+    alpha = match.group(2)
+    return f"Step {step} (alpha {alpha})"
+
+
+def list_poison_preview_entries(output_dir: str) -> List[Dict[str, str]]:
+    if not output_dir:
+        return []
+
+    entries: List[Dict[str, str]] = []
+    grid_path = os.path.join(output_dir, POISON_GRID_IMAGE_NAME)
+    if os.path.isfile(grid_path):
+        entries.append({"label": "Grid", "path": grid_path})
+
+    preview_paths = glob.glob(os.path.join(output_dir, "poison_step_*_preview.png"))
+    for preview_path in sorted(preview_paths, key=_preview_sort_key):
+        if os.path.isfile(preview_path):
+            entries.append(
+                {
+                    "label": _build_preview_tab_label(preview_path),
+                    "path": preview_path,
+                }
+            )
+
+    return entries
+
+
 def build_iteration_plan(
     current_base: str,
     lora_models: List[str],
@@ -57,7 +161,7 @@ def build_iteration_plan(
     if not lora_models:
         return []
 
-    output_name = f"poison_step_{iteration}_alpha_{alpha:.2f}.safetensors"
+    output_name = build_poison_output_name(iteration, alpha)
     output_path = os.path.join(output_dir, output_name)
 
     return [
@@ -180,25 +284,15 @@ def run_poison_merge(
     v2 = bool(p_config.get("v2", False))
     no_metadata = bool(p_config.get("no_metadata", False))
 
-    alphas = calculate_alphas(initial_alpha, iterations, decay_type)
+    alphas = resolve_poison_alphas(
+        initial_alpha,
+        iterations,
+        decay_type,
+        alpha_overrides_str,
+    )
     if not lora_models:
         raise ValueError("Poison Merge requires at least one LoRA model.")
-
-    # オーバーライドがあればパースして上書き
-    if alpha_overrides_str:
-        try:
-            overrides = [
-                float(x.strip()) for x in alpha_overrides_str.split(",") if x.strip()
-            ]
-            if overrides:
-                # 入力された数に合わせてイテレーション回数を調整
-                alphas = overrides
-                iterations = len(alphas)
-                logging.info(f"[{task_name}] Using custom alpha overrides: {alphas}")
-        except ValueError:
-            logging.warning(
-                f"[{task_name}] Invalid alpha overrides format. Falling back to calculated curve."
-            )
+    iterations = len(alphas)
 
     logging.info(f"[{task_name}] Target Alphas: {alphas}")
     logging.info(f"[{task_name}] LoRAs: {lora_models}")
@@ -207,12 +301,27 @@ def run_poison_merge(
         f"precision={precision}, save_precision={save_precision}"
     )
 
+    preview_width = int(p_config.get("width", 512))
+    preview_height = int(p_config.get("height", 512))
+    preview_steps = int(p_config.get("steps", 20))
+    preview_cfg = float(p_config.get("cfg", 7.0))
+    preview_sampler = p_config.get("sampler_name", "euler")
+    preview_scheduler = p_config.get("scheduler", "normal")
+
     os.makedirs(output_dir, exist_ok=True)
     images = []
 
     current_base = base_model
     last_output_path = None
     failure: Exception | None = None
+    import random
+
+    actual_seed = int(seed) if int(seed) > 0 else random.randint(1, 1125899906842624)
+    logging.info(
+        f"[{task_name}] Preview generation settings: size={preview_width}x{preview_height}, "
+        f"steps={preview_steps}, cfg={preview_cfg}, sampler={preview_sampler}, "
+        f"scheduler={preview_scheduler}, seed={actual_seed}"
+    )
 
     for i, current_alpha in enumerate(alphas):
         logging.info(
@@ -257,12 +366,6 @@ def run_poison_merge(
                 f"[{task_name}] Step {i + 1} Merge completed: {os.path.basename(current_base)}"
             )
 
-            # 画像生成
-            import random
-
-            actual_seed = (
-                int(seed) if int(seed) > 0 else random.randint(1, 1125899906842624)
-            )
             logging.info(
                 f"[{task_name}] Step {i + 1} Generating image with seed: {actual_seed}"
             )
@@ -271,16 +374,24 @@ def run_poison_merge(
                 model_path=current_base,
                 prompt=prompt,
                 negative_prompt=negative_prompt,
-                width=512,
-                height=512,
-                steps=20,
-                cfg=7.0,
-                sampler_name="euler",
-                scheduler="normal",
+                width=preview_width,
+                height=preview_height,
+                steps=preview_steps,
+                cfg=preview_cfg,
+                sampler_name=preview_sampler,
+                scheduler=preview_scheduler,
                 seed=actual_seed,
             )
 
             if img:
+                preview_path = os.path.join(
+                    output_dir,
+                    build_poison_preview_name(i + 1, current_alpha),
+                )
+                img.save(preview_path)
+                logging.info(
+                    f"[{task_name}] Step {i + 1} Preview saved to {preview_path}"
+                )
                 images.append((img, current_alpha))
             else:
                 logging.warning(f"[{task_name}] Step {i + 1} Image generation failed.")
@@ -295,7 +406,7 @@ def run_poison_merge(
 
     # 全ステップ終了後、グリッド画像を生成
     if images:
-        w, h = 512, 512
+        w, h = preview_width, preview_height
         grid_w = len(images) * w
         grid_h = h
         grid_img = Image.new("RGB", (grid_w, grid_h))
@@ -309,7 +420,7 @@ def run_poison_merge(
             draw.rectangle([(px + 5, 5), (px + 150, 25)], fill="black")
             draw.text((px + 10, 10), text, fill="white")
 
-        grid_out = os.path.join(output_dir, "poison_merge_grid.png")
+        grid_out = os.path.join(output_dir, POISON_GRID_IMAGE_NAME)
         grid_img.save(grid_out)
         logging.info(f"[{task_name}] Grid image saved to {grid_out}")
 
