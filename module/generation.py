@@ -39,6 +39,74 @@ _SCHEDULER_MAP: dict[str, str] = {
 }
 
 
+def _find_meta_tensor_names(module: torch.nn.Module) -> set[str]:
+    """モジュール内で meta デバイス上に残っているパラメータ/バッファ名を返す。"""
+    meta_names = {
+        name
+        for name, param in module.named_parameters()
+        if getattr(param, "device", None) == torch.device("meta")
+    }
+    meta_names.update(
+        name
+        for name, buffer in module.named_buffers()
+        if getattr(buffer, "device", None) == torch.device("meta")
+    )
+    return meta_names
+
+
+def _materialize_meta_module(module: torch.nn.Module, device: str) -> None:
+    """transformers 系の meta テンソルを実体化する。"""
+    meta_names = _find_meta_tensor_names(module)
+    if not meta_names:
+        return
+
+    if not hasattr(module, "_move_missing_keys_from_meta_to_device") or not hasattr(
+        module, "_initialize_missing_keys"
+    ):
+        raise RuntimeError(
+            f"{module.__class__.__name__} に meta テンソルが残っていますが、"
+            "安全に実体化する手段が見つかりませんでした。"
+        )
+
+    logger.warning(
+        f"{module.__class__.__name__} に meta テンソルが残っていたため、"
+        f"読み込み後の実体化ワークアラウンドを適用します。({len(meta_names)}件)"
+    )
+
+    hf_quantizer = getattr(module, "hf_quantizer", None)
+    target_device = torch.device(device)
+    module._move_missing_keys_from_meta_to_device(  # type: ignore[attr-defined]
+        meta_names,
+        {"": target_device},
+        None,
+        hf_quantizer,
+    )
+    module._initialize_missing_keys(hf_quantizer is not None)  # type: ignore[attr-defined]
+
+    remaining_meta_names = _find_meta_tensor_names(module)
+    if remaining_meta_names:
+        raise RuntimeError(
+            f"{module.__class__.__name__} の meta テンソル解消に失敗しました: "
+            f"{', '.join(sorted(remaining_meta_names)[:5])}"
+        )
+
+
+def _prepare_pipeline_for_device(pipe, device: str) -> None:
+    """`pipe.to(device)` 前に、各コンポーネントの meta テンソルを解消する。"""
+    for component_name, component in pipe.components.items():
+        if not isinstance(component, torch.nn.Module):
+            continue
+
+        meta_names = _find_meta_tensor_names(component)
+        if not meta_names:
+            continue
+
+        logger.warning(
+            f"パイプラインコンポーネント '{component_name}' に meta テンソルが残っています。"
+        )
+        _materialize_meta_module(component, device)
+
+
 def _is_sdxl_checkpoint(model_path: str) -> bool:
     """safetensors ファイルのキー構造から SDXL かどうかを判定する。
 
@@ -169,6 +237,9 @@ def get_cached_pipeline(model_path: str):
     try:
         _evict_cache_if_needed(size_gb)
 
+        target_device = "cuda" if torch.cuda.is_available() else "cpu"
+        load_dtype = torch.float16 if target_device == "cuda" else torch.float32
+
         if is_sdxl:
             from diffusers import StableDiffusionXLPipeline
 
@@ -177,7 +248,7 @@ def get_cached_pipeline(model_path: str):
             )
             pipe = StableDiffusionXLPipeline.from_single_file(
                 model_path,
-                torch_dtype=torch.float16,
+                torch_dtype=load_dtype,
                 use_safetensors=True,
             )
         else:
@@ -188,22 +259,22 @@ def get_cached_pipeline(model_path: str):
             )
             pipe = StableDiffusionPipeline.from_single_file(
                 model_path,
-                torch_dtype=torch.float16,
+                torch_dtype=load_dtype,
                 use_safetensors=True,
             )
 
         # デバイス・最適化の設定
-        if torch.cuda.is_available():
-            device = "cuda"
-            pipe = pipe.to(device)
+        _prepare_pipeline_for_device(pipe, target_device)
+
+        if target_device == "cuda":
+            pipe = pipe.to(target_device)
             try:
                 pipe.enable_attention_slicing()
             except Exception:
                 pass
         else:
-            device = "cpu"
             logger.warning("CUDA が利用できません。CPU で実行します（低速）。")
-            pipe = pipe.to(device)
+            pipe = pipe.to(target_device)
 
         # キャッシュに保存
         _MODEL_CACHE[model_path] = {"pipe": pipe, "size_gb": size_gb}
