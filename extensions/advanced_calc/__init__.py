@@ -23,6 +23,7 @@ def target_angle(
     diff_r: Parameter(Tensor),
     left: Parameter(Tensor),
     right: Parameter(Tensor),
+    velocity: Parameter(Tensor) = 1.0,
     key_patterns_json: Parameter(str) = "[]",
     **kwargs,
 ) -> Return(Tensor):
@@ -43,7 +44,7 @@ def target_angle(
     t = (2.0 * torch.cos(theta)) / (1.0 + torch.cos(theta))
     avg = (left + right) * 0.5
     res = target * (1.0 - t) + avg * t
-    return res
+    return target * (1.0 - velocity) + res * velocity
 
 
 @merge_method
@@ -64,9 +65,10 @@ def target_train_difference(
     if not _is_key_matched(kwargs.get("key", ""), key_patterns_json):
         return target
 
-    diff_AB = left - right
+    diff_A1 = diff_l
+    diff_AB = diff_r
     distance_A0 = torch.abs(diff_AB)
-    distance_A1 = torch.abs(left - target)
+    distance_A1 = torch.abs(diff_A1)
 
     sum_distances = distance_A0 + distance_A1
     scale = torch.where(

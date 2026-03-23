@@ -170,6 +170,10 @@ def _render_lora_ratio_selector(key_prefix):
 
 
 def render_lora_ops_tab():
+    gr.Markdown(
+        "LoRA Ops は通常の model merge とは別系統です。`left_right_velocity` は使わず、"
+        "LoRA Merge / Apply では各 LoRA の `ratio`、Extract では `alpha` / `beta` を使います。"
+    )
     with gr.Tabs():
         with gr.TabItem("Extract LoRA"):
             gr.Markdown("### Extract LoRA from Checkpoints")

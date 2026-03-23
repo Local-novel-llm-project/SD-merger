@@ -59,6 +59,8 @@ def parse_multi_merge_command(cmd_text: str):
                 # S= が明示的に指定されていない場合のみ "mix" にフォールバックする
                 if "strategy" not in op_dict or op_dict["strategy"] == "mbw_each":
                     op_dict["strategy"] = "mix"
+            elif key in ("LRV", "Left_Right_Velocity", "Strategy_Velocity"):
+                op_dict["left_right_velocity"] = float(val)
 
         # もし MBW の上書きがあったら文字列化して追加
         if op_dict.get("strategy", "mbw_each") == "mbw_each":
@@ -77,13 +79,13 @@ def render_multi_merge_tab():
         "1行に1つのマージ処理を記述し、複数のパラメータでの一括マージを行います。変数同士はカンマ(`,`)で区切ります。"
     )
     gr.Markdown(
-        "**利用可能な変数:** `O` (出力ファイル名), `Model_A`, `Model_B`, `S` または `Strategy` (マージ戦略), `TS` または `Target_Strategy` (ターゲット処理), `IN_A_00` ~ `IN_A_11`, `OUT_A_00` ~ `OUT_A_11`, `M_00` 等"
+        "**利用可能な変数:** `O` (出力ファイル名), `Model_A`, `Model_B`, `S` または `Strategy` (マージ戦略), `TS` または `Target_Strategy` (ターゲット処理), `base_alpha` (最終適用量としての `Velocity`), `LRV` / `Left_Right_Velocity` / `Strategy_Velocity` (A/B 計算段階の量), `IN_A_00` ~ `IN_A_11`, `OUT_A_00` ~ `OUT_A_11`, `M_00` 等"
     )
 
     cmd_text = gr.Textbox(
         label="Commands",
         lines=10,
-        placeholder="O=out1.safetensors, S=cosineA, Model_A=model_a.safetensors, Model_B=model_b.safetensors\nO=out2.safetensors, OUT_B_11=0.8, Model_A=model_a.safetensors, Model_B=model_b.safetensors",
+        placeholder="O=out1.safetensors, S=cosineA, base_alpha=0.5, LRV=0.75, Model_A=model_a.safetensors, Model_B=model_b.safetensors\nO=out2.safetensors, OUT_B_11=0.8, Model_A=model_a.safetensors, Model_B=model_b.safetensors",
     )
 
     run_btn = gr.Button("Run Batch Merge", variant="primary")

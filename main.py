@@ -131,6 +131,125 @@ def _resolve_model_strategy_name(
     return str(value)
 
 
+def _annotate_model_config_metadata(config: dict, raw_config: dict) -> dict:
+    raw_models = raw_config.get("models")
+    models = config.get("models")
+    if not isinstance(raw_models, list) or not isinstance(models, list):
+        return config
+
+    for idx, model_config in enumerate(models):
+        if not isinstance(model_config, dict):
+            continue
+        raw_model_config = raw_models[idx] if idx < len(raw_models) else None
+        explicit_left_right_velocity = (
+            isinstance(raw_model_config, dict)
+            and "left_right_velocity" in raw_model_config
+        )
+        model_config["_left_right_velocity_explicit"] = explicit_left_right_velocity
+
+    return config
+
+
+def _resolve_strategy_velocity(
+    model_config: dict,
+    target_velocity: float,
+    *,
+    has_target_recipe: bool,
+) -> float:
+    left_right_velocity = model_config.get("left_right_velocity", 1.0)
+    if has_target_recipe:
+        return left_right_velocity
+
+    if (
+        model_config.get("_left_right_velocity_explicit", False)
+        or left_right_velocity != 1.0
+    ):
+        return left_right_velocity
+
+    return target_velocity
+
+
+def _validate_target_strategy_combination(
+    strategy_name: str,
+    target_strategy_name: str,
+) -> None:
+    if target_strategy_name == "trainDifference" and strategy_name != "subtraction":
+        raise ConfigError(
+            "target_strategy 'trainDifference' を使う場合、strategy は 'subtraction' を指定してください。"
+        )
+
+
+def _apply_target_strategy(
+    *,
+    recipe,
+    strategy_name: str,
+    target_strategy_name: str,
+    calc_func,
+    target_func,
+    left_node,
+    right_node,
+    diff_node,
+    target_velocity: float,
+    strategy_velocity: float,
+    patterns_json: str,
+):
+    if target_strategy_name == "angle":
+        diff_l = calc_func(
+            left_node,
+            recipe,
+            velocity=strategy_velocity,
+            key_patterns_json=patterns_json,
+        )
+        diff_r = calc_func(
+            right_node,
+            recipe,
+            velocity=strategy_velocity,
+            key_patterns_json=patterns_json,
+        )
+        return target_func(
+            recipe,
+            diff_l=diff_l,
+            diff_r=diff_r,
+            left=left_node,
+            right=right_node,
+            velocity=target_velocity,
+            key_patterns_json=patterns_json,
+        )
+
+    if target_strategy_name == "extract":
+        return target_func(
+            recipe,
+            a=left_node,
+            b=right_node,
+            velocity=target_velocity,
+            key_patterns_json=patterns_json,
+        )
+
+    if target_strategy_name == "trainDifference":
+        diff_l = calc_func(
+            recipe,
+            right_node,
+            velocity=strategy_velocity,
+            key_patterns_json=patterns_json,
+        )
+        return target_func(
+            recipe,
+            diff_l=diff_l,
+            diff_r=diff_node,
+            left=left_node,
+            right=right_node,
+            velocity=target_velocity,
+            key_patterns_json=patterns_json,
+        )
+
+    return target_func(
+        recipe,
+        diff_node,
+        velocity=target_velocity,
+        key_patterns_json=patterns_json,
+    )
+
+
 def _ensure_mapping_config(raw_config: object) -> dict:
     if isinstance(raw_config, dict):
         return raw_config
@@ -526,7 +645,9 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
 
     try:
         validated_config = MergeConfig(**normalized_raw_config)
-        config = run_pre_config_hooks(validated_config.model_dump())
+        config = validated_config.model_dump()
+        config = _annotate_model_config_metadata(config, normalized_raw_config)
+        config = run_pre_config_hooks(config)
     except ValidationError as e:
         logger.error(f"コンフィグのバリデーションエラー: {e}")
         raise ConfigError("Invalid configuration syntax or types.", original_error=e)
@@ -556,7 +677,6 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
         left_node = sd_mecha.model(left_dict)
         right_node = sd_mecha.model(right_dict)
         target_velocity = model_config.get("velocity", 1.0)
-        left_right_velocity = model_config.get("left_right_velocity", 1.0)
         strategy_name = _resolve_model_strategy_name(
             model_config,
             "strategy",
@@ -585,54 +705,48 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
             raise ConfigError("key_patterns の指定は必須です。")
 
         calc_func = get_calculation_strategy(strategy_name, replace_with)
-        target_func = get_target_calculation_strategy(target_strategy_name)
-        norm_func = get_normalization_calculation_strategy(normalization_strategy_name)
-
         patterns_json = json.dumps(key_patterns)
+        has_target_recipe = recipe is not None
+        strategy_velocity = _resolve_strategy_velocity(
+            model_config,
+            target_velocity,
+            has_target_recipe=has_target_recipe,
+        )
 
         diff_node = calc_func(
             left_node,
             right_node,
-            velocity=left_right_velocity,
+            velocity=strategy_velocity,
             key_patterns_json=patterns_json,
         )
 
-        if recipe is not None:
-            if target_strategy_name == "angle":
-                diff_l = calc_func(
-                    left_node,
-                    recipe,
-                    velocity=left_right_velocity,
-                    key_patterns_json=patterns_json,
-                )
-                diff_r = calc_func(
-                    right_node,
-                    recipe,
-                    velocity=left_right_velocity,
-                    key_patterns_json=patterns_json,
-                )
-                merged = target_func(
-                    recipe,
-                    diff_l=diff_l,
-                    diff_r=diff_r,
-                    left=left_node,
-                    right=right_node,
-                    key_patterns_json=patterns_json,
-                )
-            else:
-                merged = target_func(
-                    recipe,
-                    diff_node,
-                    velocity=target_velocity,
-                    key_patterns_json=patterns_json,
-                )
+        if has_target_recipe:
+            _validate_target_strategy_combination(strategy_name, target_strategy_name)
+            target_func = get_target_calculation_strategy(target_strategy_name)
+            norm_func = get_normalization_calculation_strategy(
+                normalization_strategy_name
+            )
+
+            merged = _apply_target_strategy(
+                recipe=recipe,
+                strategy_name=strategy_name,
+                target_strategy_name=target_strategy_name,
+                calc_func=calc_func,
+                target_func=target_func,
+                left_node=left_node,
+                right_node=right_node,
+                diff_node=diff_node,
+                target_velocity=target_velocity,
+                strategy_velocity=strategy_velocity,
+                patterns_json=patterns_json,
+            )
 
             if norm_func is not None:
                 merged = norm_func(recipe, merged)
 
             recipe = merged
         else:
-            recipe = scale_tensor(diff_node, scale=target_velocity)
+            recipe = diff_node
 
     effective_output_dir = _resolve_effective_output_dir(
         config,

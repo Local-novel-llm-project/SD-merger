@@ -84,6 +84,89 @@ def _create_default_merge_output_name(model_a_name: str, model_b_name: str) -> s
     return generate_filename(model_a_name, model_b_name)
 
 
+def _parse_optional_float(value: object, *, field_name: str) -> float | None:
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid number.") from exc
+
+
+def _build_merge_task_config(
+    a,
+    b,
+    c,
+    strat,
+    t_strat,
+    vel,
+    left_right_vel,
+    use_adv,
+    mbw,
+    vae,
+    out,
+    lazy_load_opt,
+):
+    if not a or not b:
+        raise ValueError("Model A and Model B are required.")
+
+    if c == "選択しない":
+        target_model_path = ""
+    else:
+        target_model_path = get_model_path(c) if c else get_model_path(a)
+    left_model_path = get_model_path(a)
+    right_model_path = get_model_path(b)
+
+    config = {
+        "target_model": target_model_path,
+        "lazy_load": lazy_load_opt,
+        "models": [
+            {
+                "left": left_model_path,
+                "right": right_model_path,
+                "strategy": strat,
+                "target_strategy": t_strat,
+                "velocity": float(vel),
+                "key_patterns": ["."],
+            }
+        ],
+    }
+
+    if use_adv and mbw:
+        config["models"][0]["mbw"] = mbw
+
+    if use_adv:
+        strategy_velocity = _parse_optional_float(
+            left_right_vel,
+            field_name="A/B Strategy Velocity",
+        )
+        if strategy_velocity is not None:
+            config["models"][0]["left_right_velocity"] = strategy_velocity
+
+    if use_adv and vae:
+        config["bake_in_vae"] = get_model_path(vae)
+
+    if use_adv and out:
+        config["output_name"] = out
+        output_name = out
+    else:
+        output_name = _create_default_merge_output_name(a, b)
+
+    return config, output_name
+
+
+MERGE_VELOCITY_HELP = (
+    "`Velocity` は最終適用量です。"
+    " `LRV` は A/B を計算する段階の量で、"
+    " target/base へ適用する前の混ぜ方を変えます。"
+)
+
+
 def create_ui():
     """Gradio UI のメインアプリケーションを構築する"""
     from module.extension_manager import load_extensions
@@ -175,12 +258,13 @@ def create_ui():
                             value="mix",
                         )
                         velocity = gr.Slider(
-                            label="Velocity (alpha)",
+                            label="Velocity (Target / Final)",
                             minimum=0.0,
                             maximum=1.0,
                             step=0.01,
                             value=0.5,
                         )
+                        gr.Markdown(MERGE_VELOCITY_HELP)
 
                 with gr.Row():
                     with gr.Accordion("Advanced Options", open=False):
@@ -190,6 +274,10 @@ def create_ui():
                         mbw_str = gr.Textbox(
                             label="Merge Block Weight (MBW)",
                             placeholder="e.g. 1,0.5,0.5,0...",
+                        )
+                        left_right_velocity = gr.Textbox(
+                            label="LRV (A/B Strategy, optional)",
+                            placeholder="blank = auto (AB uses Velocity, ABC uses 1.0)",
                         )
                         bake_in_vae = gr.Dropdown(label="Bake in VAE", choices=get_model_list())
                         output_name = gr.Textbox(
@@ -202,47 +290,28 @@ def create_ui():
                 merge_btn = gr.Button("Merge Models", variant="primary")
                 merge_output = gr.Textbox(label="Output Log")
 
-                def run_merge(a, b, c, strat, t_strat, vel, use_adv, mbw, vae, out, lazy_load_opt):
-                    if not a or not b:
-                        return "Model A and Model B are required."
-
-                    if c == "選択しない":
-                        target_model_path = ""
-                    else:
-                        target_model_path = get_model_path(c) if c else get_model_path(a)
-                    left_model_path = get_model_path(a)
-                    right_model_path = get_model_path(b)
-
-                    config = {
-                        "target_model": target_model_path,
-                        "lazy_load": lazy_load_opt,
-                        "models": [
-                            {
-                                "left": left_model_path,
-                                "right": right_model_path,
-                                "strategy": strat,
-                                "target_strategy": t_strat,
-                                "velocity": float(vel),
-                                "key_patterns": ["."],
-                            }
-                        ],
-                    }
-                    if use_adv and mbw:
-                        config["models"][0]["mbw"] = mbw
-                    if use_adv and vae:
-                        config["bake_in_vae"] = get_model_path(vae)
-                    if use_adv and out:
-                        config["output_name"] = out
-                    else:
-                        out = _create_default_merge_output_name(a, b)
-
+                def run_merge(a, b, c, strat, t_strat, vel, left_right_vel, use_adv, mbw, vae, out, lazy_load_opt):
                     try:
+                        config, resolved_output_name = _build_merge_task_config(
+                            a,
+                            b,
+                            c,
+                            strat,
+                            t_strat,
+                            vel,
+                            left_right_vel,
+                            use_adv,
+                            mbw,
+                            vae,
+                            out,
+                            lazy_load_opt,
+                        )
                         task_id = enqueue_merge_task(
                             config,
-                            out,
+                            resolved_output_name,
                             task_name=f"Merge: {strat}",
                         )
-                        return f"Merge task '{task_id}' added to queue. Output will be {out}"
+                        return f"Merge task '{task_id}' added to queue. Output will be {resolved_output_name}"
                     except Exception as e:
                         return build_user_error_message(e, action="マージタスクの追加")
 
@@ -255,6 +324,7 @@ def create_ui():
                         strategy,
                         target_strategy,
                         velocity,
+                        left_right_velocity,
                         use_advanced_options,
                         mbw_str,
                         bake_in_vae,

@@ -23,6 +23,7 @@ def _build_history_row(entry: dict) -> dict:
 
     strategy = model_config.get("strategy", "")
     velocity = model_config.get("velocity", "")
+    left_right_velocity = model_config.get("left_right_velocity", "")
     model_a = model_config.get("left", "")
     model_b = model_config.get("right", "")
 
@@ -34,7 +35,8 @@ def _build_history_row(entry: dict) -> dict:
         "Date": entry.get("date", ""),
         "Output Name": entry.get("output_name", ""),
         "Strategy": strategy,
-        "Velocity": velocity,
+        "Velocity (Final)": velocity,
+        "LRV (A/B)": left_right_velocity,
         "Model A": model_a,
         "Model B": model_b,
         "Status": entry.get("status", "Unknown"),
@@ -81,7 +83,8 @@ def get_history_df():
                 "Date",
                 "Output Name",
                 "Strategy",
-                "Velocity",
+                "Velocity (Final)",
+                "LRV (A/B)",
                 "Model A",
                 "Model B",
                 "Status",
@@ -96,6 +99,9 @@ def render_history_tab():
     gr.Markdown("### Merge History")
     gr.Markdown(
         "View your past merges. Select a row and click 'Load Selected' to restore the parameters into the main Merge Models tab."
+    )
+    gr.Markdown(
+        "`Velocity (Final)` は target/base への最終適用量、`LRV (A/B)` は A/B 計算段階の量です。"
     )
 
     with gr.Row():
@@ -115,7 +121,8 @@ def render_history_tab():
             "Date",
             "Output Name",
             "Strategy",
-            "Velocity",
+            "Velocity (Final)",
+            "LRV (A/B)",
             "Model A",
             "Model B",
             "Status",

@@ -5,6 +5,69 @@ from module.error_messages import build_user_error_message, build_user_message
 from ui.utils import enqueue_merge_task, get_model_list, get_model_path
 
 
+def _parse_optional_float(value: object, *, field_name: str) -> float | None:
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid number.") from exc
+
+
+def _build_mbw_each_task_config(
+    a,
+    b,
+    c,
+    strat,
+    t_strat,
+    vel,
+    mbw_a_val,
+    mbw_b_val,
+    left_right_vel,
+    use_adv,
+    out,
+):
+    target_model_path = get_model_path(c) if c else get_model_path(a)
+    config = {
+        "target_model": target_model_path,
+        "models": [
+            {
+                "left": get_model_path(a),
+                "right": get_model_path(b),
+                "strategy": strat,
+                "target_strategy": t_strat,
+                "velocity": float(vel),
+                "mbw_a": mbw_a_val,
+                "mbw_b": mbw_b_val,
+            }
+        ],
+    }
+
+    if use_adv:
+        strategy_velocity = _parse_optional_float(
+            left_right_vel,
+            field_name="A/B Strategy Velocity",
+        )
+        if strategy_velocity is not None:
+            config["models"][0]["left_right_velocity"] = strategy_velocity
+        if out:
+            config["output_name"] = out
+
+    return config
+
+
+MERGE_VELOCITY_HELP = (
+    "`Velocity` は target/base へ適用する最終量です。"
+    " `LRV` は A/B 側の計算量で、"
+    " MBW で作る A/B 結果の強さや fallback 挙動に影響します。"
+)
+
+
 def generate_curve(curve_type: str, start_val: float, end_val: float, length: int) -> list[float]:
     """指定されたカーブタイプで長さ length の補間配列を生成する"""
     if length <= 0:
@@ -121,6 +184,14 @@ def render_mbw_each_tab():
                 ],
                 value="mix",
             )
+            velocity = gr.Slider(
+                label="Velocity (Target / Final)",
+                minimum=0.0,
+                maximum=1.0,
+                step=0.01,
+                value=0.5,
+            )
+            gr.Markdown(MERGE_VELOCITY_HELP)
 
     # --- Pincushion Merge (Auto Curve Generator) UI ---
     with gr.Accordion("Pincushion Merge (Auto Curve Generator)", open=False):
@@ -208,12 +279,16 @@ def render_mbw_each_tab():
     with gr.Row():
         with gr.Accordion("Advanced Options", open=False):
             use_advanced_options = gr.Checkbox(label="Enable Advanced Options", value=False)
+            left_right_velocity = gr.Textbox(
+                label="LRV (A/B Strategy, optional)",
+                placeholder="blank = auto (MBW uses block weights unless fallback is needed)",
+            )
             output_name = gr.Textbox(label="Output Filename", value="mbw_each_merged.safetensors")
 
     merge_btn = gr.Button("Run MBW Each Merge", variant="primary")
     output_log = gr.Textbox(label="Output Log", lines=3)
 
-    def run_mbw_each_merge(a, b, c, strat, t_strat, mbw_a_val, mbw_b_val, use_adv, out):
+    def run_mbw_each_merge(a, b, c, strat, t_strat, vel, mbw_a_val, mbw_b_val, left_right_vel, use_adv, out):
         if not a or not b:
             return build_user_message(
                 "MBW Each マージ",
@@ -239,22 +314,19 @@ def render_mbw_each_tab():
                     "SD1.5 は 26 個、SDXL は 20 個の値を入力してください。",
                 )
 
-            target_model_path = get_model_path(c) if c else get_model_path(a)
-            config = {
-                "target_model": target_model_path,
-                "models": [
-                    {
-                        "left": get_model_path(a),
-                        "right": get_model_path(b),
-                        "strategy": strat,
-                        "target_strategy": t_strat,
-                        "mbw_a": mbw_a_val,
-                        "mbw_b": mbw_b_val,
-                    }
-                ],
-            }
-            if use_adv and out:
-                config["output_name"] = out
+            config = _build_mbw_each_task_config(
+                a,
+                b,
+                c,
+                strat,
+                t_strat,
+                vel,
+                mbw_a_val,
+                mbw_b_val,
+                left_right_vel,
+                use_adv,
+                out,
+            )
 
             task_id = enqueue_merge_task(config, out, task_name="MBW Each")
 
@@ -265,6 +337,6 @@ def render_mbw_each_tab():
 
     merge_btn.click(
         run_mbw_each_merge,
-        inputs=[model_a, model_b, model_c, strategy, target_strategy, mbw_a, mbw_b, use_advanced_options, output_name],
+        inputs=[model_a, model_b, model_c, strategy, target_strategy, velocity, mbw_a, mbw_b, left_right_velocity, use_advanced_options, output_name],
         outputs=[output_log],
     )

@@ -8,6 +8,51 @@ from module.generation import generate_first_image
 from module.metrics import calculate_clip_score, generate_radar_chart
 
 
+def _parse_optional_float(value: object, *, field_name: str) -> float | None:
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid number.") from exc
+
+
+def _build_ab_merge_config(left_name, right_name, strat, vel, left_right_vel):
+    config = {
+        "target_model": get_model_path(left_name),
+        "models": [
+            {
+                "left": get_model_path(left_name),
+                "right": get_model_path(right_name),
+                "strategy": strat,
+                "velocity": float(vel),
+                "key_patterns": ["."],
+            }
+        ],
+    }
+
+    strategy_velocity = _parse_optional_float(
+        left_right_vel,
+        field_name="A/B Strategy Velocity",
+    )
+    if strategy_velocity is not None:
+        config["models"][0]["left_right_velocity"] = strategy_velocity
+
+    return config
+
+
+MERGE_VELOCITY_HELP = (
+    "`Velocity` は最終適用量です。"
+    " `LRV` は A/B を計算する段階の量で、"
+    " target/base へ適用する前の混ぜ方を変えます。"
+)
+
+
 def render_ab_test_tab():
     gr.Markdown("### A/B Test Merge")
     gr.Markdown(
@@ -33,7 +78,12 @@ def render_ab_test_tab():
                 value="mix",
             )
             velocity = gr.Slider(
-                label="Velocity (alpha)", minimum=0.0, maximum=1.0, step=0.01, value=0.5
+                label="Velocity (Target / Final)", minimum=0.0, maximum=1.0, step=0.01, value=0.5
+            )
+            gr.Markdown(MERGE_VELOCITY_HELP)
+            left_right_velocity = gr.Textbox(
+                label="LRV (A/B Strategy, optional)",
+                placeholder="blank = auto (A/B Test keeps 1.0)",
             )
 
             with gr.Accordion("Generation Settings", open=True):
@@ -75,7 +125,7 @@ def render_ab_test_tab():
             # Hidden state to store generated images for metric calculation
             state_images = gr.State({})
 
-    def run_comparison(ma, mb, strat, vel, p, np, s, w, h, st, c):
+    def run_comparison(ma, mb, strat, vel, left_right_vel, p, np, s, w, h, st, c):
         if not ma or not mb:
             return None, None, None, None, {}, "Please select Model A and Model B."
 
@@ -107,18 +157,13 @@ def render_ab_test_tab():
             tmp_dir = os.path.abspath("./merged/ab_tmp")
 
             def _merge_and_generate(left_name, right_name, title):
-                config = {
-                    "target_model": get_model_path(left_name),
-                    "models": [
-                        {
-                            "left": get_model_path(left_name),
-                            "right": get_model_path(right_name),
-                            "strategy": strat,
-                            "velocity": float(vel),
-                            "key_patterns": ["."],
-                        }
-                    ],
-                }
+                config = _build_ab_merge_config(
+                    left_name,
+                    right_name,
+                    strat,
+                    vel,
+                    left_right_vel,
+                )
                 out_model = run_merge_from_config(config, tmp_dir)
                 if not out_model:
                     return None, f"Failed to create merged model for {title}.\n"
@@ -182,6 +227,7 @@ def render_ab_test_tab():
             model_b,
             strategy,
             velocity,
+            left_right_velocity,
             prompt,
             negative_prompt,
             seed,
