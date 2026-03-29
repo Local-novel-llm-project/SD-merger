@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
+
 from module.arthemy_tuner_config import ARTHEMY_TUNER_MODES, build_arthemy_tune_job_config
+from ui.services.execution_service import enqueue_merge_task
 from ui.services.model_service import resolve_model_path
-from ui.utils import enqueue_merge_task
 
 
 def list_modes() -> list[str]:
@@ -36,6 +38,46 @@ def build_tuning_config(
 
     resolved_output_name = str(config.get("output_name") or "arthemy_tuned.safetensors")
     return config, resolved_output_name
+
+
+def parse_optional_float(value: str) -> float | None:
+    text = value.strip()
+    if not text:
+        return None
+    return float(text)
+
+
+def build_tuning_preview(
+    target_model: str,
+    mode: str,
+    clip_base_scale: str,
+    unet_base_scale: str,
+    vectors_override: str | None,
+    output_name: str | None,
+) -> str:
+    if not target_model:
+        return json.dumps(
+            {"hint": "Target Model を選ぶと設定プレビューを表示します。"},
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    try:
+        config, _ = build_tuning_config(
+            target_model,
+            mode,
+            parse_optional_float(clip_base_scale),
+            parse_optional_float(unet_base_scale),
+            vectors_override,
+            output_name,
+        )
+        return json.dumps(config, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps(
+            {"error": str(exc)},
+            indent=2,
+            ensure_ascii=False,
+        )
 
 
 def queue_tuning(config: dict, output_name: str) -> str:

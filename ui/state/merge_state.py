@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 import reflex as rx
 
 from ui.services.app_boot import ensure_app_ready
@@ -10,6 +8,7 @@ from ui.services.merge_service import (
     MERGE_VELOCITY_HELP,
     TARGET_STRATEGIES,
     build_basic_merge_config,
+    build_merge_preview,
     build_preview_json,
     create_default_output_name,
     queue_merge,
@@ -115,38 +114,20 @@ class MergeState(rx.State):
             self.output_name = create_default_output_name(self.model_a, self.model_b)
 
     def refresh_preview(self) -> None:
-        try:
-            if not self.model_a or not self.model_b:
-                self.preview_json = json.dumps(
-                    {
-                        "hint": "Model A と Model B を選ぶと設定プレビューを表示します。"
-                    },
-                    indent=2,
-                    ensure_ascii=False,
-                )
-                return
-
-            config, _ = build_basic_merge_config(
-                self.model_a,
-                self.model_b,
-                self.model_c,
-                self.strategy,
-                self.target_strategy,
-                float(self.velocity),
-                self.left_right_velocity,
-                self.use_advanced_options,
-                self.mbw,
-                self.bake_in_vae,
-                self.output_name,
-                self.lazy_load,
-            )
-            self.preview_json = build_preview_json(config)
-        except Exception as exc:
-            self.preview_json = json.dumps(
-                {"error": str(exc)},
-                indent=2,
-                ensure_ascii=False,
-            )
+        self.preview_json = build_merge_preview(
+            self.model_a,
+            self.model_b,
+            self.model_c,
+            self.strategy,
+            self.target_strategy,
+            self.velocity,
+            self.left_right_velocity,
+            self.use_advanced_options,
+            self.mbw,
+            self.bake_in_vae,
+            self.output_name,
+            self.lazy_load,
+        )
 
     def queue_current_merge(self) -> None:
         config, output_name = build_basic_merge_config(
