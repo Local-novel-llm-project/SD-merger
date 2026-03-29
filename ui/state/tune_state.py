@@ -28,6 +28,7 @@ class TuneState(rx.State):
 
     preview_json: str = "{}"
     status_message: str = ""
+    status_variant: str = "info"
     last_task_id: str = ""
 
     def load_page(self) -> None:
@@ -80,4 +81,5 @@ class TuneState(rx.State):
         )
         self.last_task_id = queue_tuning(config, output_name)
         self.status_message = f"Queued Arthemy Tuning task: {self.last_task_id}"
+        self.status_variant = "success"
         self.preview_json = json.dumps(config, indent=2, ensure_ascii=False)

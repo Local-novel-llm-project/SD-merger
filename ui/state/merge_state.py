@@ -36,6 +36,7 @@ class MergeState(rx.State):
     use_advanced_options: bool = False
 
     status_message: str = "Models ディレクトリを読み込んでください。"
+    status_variant: str = "info"
     preview_json: str = "{}"
     last_task_id: str = ""
     output_name_locked: bool = False
@@ -146,4 +147,5 @@ class MergeState(rx.State):
         )
         self.last_task_id = queue_merge(config, output_name)
         self.status_message = f"Queued merge task: {self.last_task_id}"
+        self.status_variant = "success"
         self.preview_json = build_preview_json(config)
