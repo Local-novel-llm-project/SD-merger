@@ -1,9 +1,39 @@
 from __future__ import annotations
 
+import os
 from copy import deepcopy
 
 from module.history import history_to_yaml, load_history
 from ui.utils import enqueue_merge_task
+
+
+def _paths_match(left: object, right: object) -> bool:
+    if left in (None, "") or right in (None, ""):
+        return False
+
+    return os.path.normcase(os.path.normpath(str(left))) == os.path.normcase(
+        os.path.normpath(str(right))
+    )
+
+
+def _resolve_history_left_right_velocity(
+    config: dict,
+    primary_model: dict,
+) -> str:
+    for key in ("left_right_velocity", "lrv", "lr", "strategy_velocity"):
+        value = primary_model.get(key)
+        if value not in (None, ""):
+            return str(value)
+
+    velocity = primary_model.get("velocity", "")
+    if velocity in (None, ""):
+        return ""
+
+    target_model = config.get("target_model")
+    if target_model in (None, "") or _paths_match(target_model, primary_model.get("left")):
+        return str(velocity)
+
+    return "1.0"
 
 
 def build_history_rows() -> list[dict[str, str]]:
@@ -19,7 +49,10 @@ def build_history_rows() -> list[dict[str, str]]:
             model_a = str(primary_model.get("left") or "")
             model_b = str(primary_model.get("right") or "")
             velocity = primary_model.get("velocity", "")
-            left_right_velocity = primary_model.get("left_right_velocity", "")
+            left_right_velocity = _resolve_history_left_right_velocity(
+                config,
+                primary_model,
+            )
         else:
             strategy = "target-only"
             model_a = str(config.get("target_model") or "")

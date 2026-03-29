@@ -71,16 +71,19 @@ def build_basic_merge_config(
     if not model_a or not model_b:
         raise ValueError("Model A and Model B are required.")
 
-    resolved_target_name = model_c if model_c and model_c != "選択しない" else model_a
-    target_model_path = resolve_model_path(resolved_target_name)
+    resolved_target_name = model_c if model_c and model_c != "選択しない" else None
+    target_model_path = (
+        resolve_model_path(resolved_target_name) if resolved_target_name else None
+    )
     left_model_path = resolve_model_path(model_a)
     right_model_path = resolve_model_path(model_b)
 
-    if not left_model_path or not right_model_path or not target_model_path:
+    if not left_model_path or not right_model_path:
+        raise ValueError("Selected models could not be resolved from the models directory.")
+    if resolved_target_name and not target_model_path:
         raise ValueError("Selected models could not be resolved from the models directory.")
 
     config = {
-        "target_model": target_model_path,
         "lazy_load": lazy_load,
         "models": [
             {
@@ -93,6 +96,8 @@ def build_basic_merge_config(
             }
         ],
     }
+    if target_model_path:
+        config["target_model"] = target_model_path
 
     if use_advanced_options and mbw and mbw.strip():
         config["models"][0]["mbw"] = mbw.strip()

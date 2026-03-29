@@ -23,7 +23,7 @@ def test_build_basic_merge_config_omits_left_right_velocity_when_blank(monkeypat
         True,
     )
 
-    assert config["target_model"] == "/models/ModelA"
+    assert "target_model" not in config
     assert config["models"][0]["left"] == "/models/ModelA"
     assert config["models"][0]["right"] == "/models/ModelB"
     assert config["models"][0]["velocity"] == 0.5
