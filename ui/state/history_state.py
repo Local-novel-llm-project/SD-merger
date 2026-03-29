@@ -15,6 +15,7 @@ class HistoryState(rx.State):
     selected_output_name: str = ""
     yaml_preview: str = "# Select an output name to inspect its recipe."
     status_message: str = ""
+    status_variant: str = "info"
 
     def load_page(self) -> None:
         ensure_app_ready()
@@ -29,14 +30,18 @@ class HistoryState(rx.State):
     def load_yaml_preview(self) -> None:
         if not self.selected_output_name.strip():
             self.status_message = "Output Name を入力してください。"
+            self.status_variant = "error"
             return
         self.yaml_preview = build_history_yaml(self.selected_output_name.strip())
         self.status_message = f"Loaded recipe: {self.selected_output_name.strip()}"
+        self.status_variant = "success"
 
     def rerun_selected(self) -> None:
         if not self.selected_output_name.strip():
             self.status_message = "Output Name を入力してください。"
+            self.status_variant = "error"
             return
         task_id = rerun_history_entry(self.selected_output_name.strip())
         self.status_message = f"Queued rerun task: {task_id}"
+        self.status_variant = "success"
         self.refresh()
