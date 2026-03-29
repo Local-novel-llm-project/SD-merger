@@ -2,17 +2,15 @@
 
 *English* | [日本語](README_ja.md)
 
-A command-line tool for merging Stable Diffusion models with flexible strategies.
-
+Stable Diffusion model merging toolkit with a Reflex-based web UI and a reusable CLI pipeline.
 
 ## Features
 
-- Multiple merge strategies: subtraction, addition, multiplication, average, replace
-- Block-level merging with MBW (Merge Block Weight) support
-- Extension system for custom merge algorithms
-- LoRA extraction, LoRA merging, and applying LoRA weights to checkpoints
+- Merge Stable Diffusion checkpoints through the same `main.py` pipeline used by the CLI
+- Queue-based execution with persistent history and rerun support
+- Reflex UI organized into `ui/services`, `ui/state`, and `ui/pages`
+- Extension system for custom merge algorithms and Arthemy tuning hooks
 - Stable Diffusion 1.5 and SDXL support
-
 
 ## Installation
 
@@ -24,55 +22,38 @@ pip install -r requirements.txt
 
 ## Quick Start
 
+Run the Reflex UI:
+
 ```bash
-python main.py -c example/example.yaml
+python main.py ui --port 3000
 ```
 
-## Configuration
+Run a merge directly from YAML:
 
-Create a YAML config file:
-
-```yaml
-target_model: "base_model"
-models:
-  - left: "model_a"
-    right: "model_b"
-    velocity: 1.0
-    strategy: "addition"
-    key_patterns:
-      - "."
+```bash
+python main.py merge -c example/example.yaml
 ```
 
-### Key Parameters
+## UI Structure
 
-| Parameter | Description |
-|-----------|-------------|
-| `target_model` | Base model to merge onto |
-| `left` / `right` | Models to merge |
-| `velocity` | Merge strength (0.0-1.0) |
-| `strategy` | Merge algorithm |
-| `key_patterns` | Layers to target |
+- `ui/services`: build UI-specific configs and bridge to queue/history/core pipeline
+- `ui/state`: Reflex state and event handlers
+- `ui/pages`: page composition for Merge, Queue, History, and Arthemy Tuner
 
-### Available Strategies
+The UI reuses the existing core implementation in `main.py`, `module/*`, and `extensions/*`.
 
-- `subtraction` - Calculate difference
-- `addition` - Add models
-- `multiplication` - Multiply weights
-- `average` - Blend models
-- `replace` - Direct replacement
+## CLI Commands
 
-## Extensions
+```bash
+python main.py merge -c example/example.yaml
+python main.py tune --model models/example.safetensors
+python main.py ui --host 0.0.0.0 --port 3000
+```
 
-Extensions add extra functionality:
+## Notes
 
-| Extension | Description |
-|-----------|-------------|
-| `supermerger_mbw` | Merge Block Weight for layer-wise control |
-| `lora_ops` | LoRA extraction, merging, and checkpoint apply |
-| `resize_lora` | Resize LoRA ranks |
-| `quantum_merge` | Advanced merge algorithms |
-
-See [README_ja.md](README_ja.md) for extension details.
+- Reflex uses port `3000` for the frontend by default. The backend is started on `3001`.
+- The old Gradio UI has been removed. Advanced workflows should now be migrated by extending the Reflex pages and services.
 
 ## License
 
