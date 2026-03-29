@@ -5,25 +5,20 @@ import pandas as pd
 import os
 import tempfile
 from ui.utils import enqueue_merge_task
-
-
-def _get_primary_model_config(config: dict) -> dict:
-    models = config.get("models")
-    if not isinstance(models, list):
-        return {}
-    for model in models:
-        if isinstance(model, dict):
-            return model
-    return {}
+from ui.merge_config import (
+    get_primary_model_config,
+    resolve_left_right_velocity,
+    resolve_output_name,
+)
 
 
 def _build_history_row(entry: dict) -> dict:
     config = entry.get("config", {})
-    model_config = _get_primary_model_config(config)
+    model_config = get_primary_model_config(config)
 
     strategy = model_config.get("strategy", "")
     velocity = model_config.get("velocity", "")
-    left_right_velocity = model_config.get("left_right_velocity", "")
+    left_right_velocity = resolve_left_right_velocity(config, model_config)
     model_a = model_config.get("left", "")
     model_b = model_config.get("right", "")
 
@@ -47,15 +42,7 @@ def _resolve_imported_output_name(
     config: dict,
     default_output_name: str = "imported_recipe_merge.safetensors",
 ) -> str:
-    output_name = config.get("output_name")
-    if output_name:
-        return str(output_name)
-
-    model_config = _get_primary_model_config(config)
-    if model_config.get("output_name"):
-        return str(model_config["output_name"])
-
-    return default_output_name
+    return resolve_output_name(config, default_output_name)
 
 
 def _cleanup_download_file(path: str | None) -> None:
@@ -106,6 +93,7 @@ def render_history_tab():
 
     with gr.Row():
         refresh_btn = gr.Button("Refresh History", variant="secondary")
+        load_btn = gr.Button("Load Selected", variant="secondary", interactive=False)
         rerun_btn = gr.Button("Re-run Selected Merge", variant="primary", interactive=False)
         download_btn = gr.DownloadButton("Download Recipe (YAML)", interactive=False)
 
@@ -136,12 +124,17 @@ def render_history_tab():
 
     def on_select(evt: gr.SelectData):
         # evt.index is a tuple [row, col]
-        return gr.update(interactive=True), gr.update(interactive=True), evt.index[0]
+        return (
+            gr.update(interactive=True),
+            gr.update(interactive=True),
+            gr.update(interactive=True),
+            evt.index[0],
+        )
 
     selected_index = gr.State(-1)
     download_path_state = gr.State(None)
 
-    history_table.select(on_select, None, [rerun_btn, download_btn, selected_index])
+    history_table.select(on_select, None, [load_btn, rerun_btn, download_btn, selected_index])
 
     refresh_btn.click(on_refresh, inputs=[], outputs=[history_table])
 
@@ -213,4 +206,4 @@ def render_history_tab():
 
     import_run_btn.click(on_run_imported, inputs=[import_file], outputs=[output_log])
 
-    return refresh_btn, rerun_btn, history_table
+    return refresh_btn, load_btn, rerun_btn, history_table, selected_index

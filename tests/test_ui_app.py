@@ -83,3 +83,67 @@ def test_build_merge_task_config_includes_optional_left_right_velocity(monkeypat
     assert config["bake_in_vae"] == "/models/VAE"
     assert config["output_name"] == "merged.safetensors"
     assert output_name == "merged.safetensors"
+
+
+def test_build_merge_form_state_from_config_restores_explicit_lrv(monkeypatch):
+    monkeypatch.setattr(app, "get_models_dir", lambda: "/models")
+
+    state = app._build_merge_form_state_from_config(
+        {
+            "target_model": "/models/ModelC",
+            "bake_in_vae": "/models/VAE",
+            "output_name": "merged.safetensors",
+            "lazy_load": False,
+            "models": [
+                {
+                    "left": "/models/ModelA",
+                    "right": "/models/ModelB",
+                    "strategy": "subtraction",
+                    "target_strategy": "addition",
+                    "velocity": 0.25,
+                    "left_right_velocity": 0.75,
+                    "mbw": "1,0.5,0.5",
+                }
+            ],
+        },
+        available_models=["ModelA", "ModelB", "ModelC", "VAE"],
+    )
+
+    assert state["model_a"]["value"] == "ModelA"
+    assert state["model_b"]["value"] == "ModelB"
+    assert state["model_c"]["value"] == "ModelC"
+    assert state["strategy"] == "subtraction"
+    assert state["target_strategy"] == "addition"
+    assert state["velocity"] == 0.25
+    assert state["use_advanced_options"] is True
+    assert state["mbw"] == "1,0.5,0.5"
+    assert state["left_right_velocity"] == "0.75"
+    assert state["bake_in_vae"]["value"] == "VAE"
+    assert state["output_name"] == "merged.safetensors"
+    assert state["lazy_load"] is False
+
+
+def test_build_merge_form_state_from_config_resolves_auto_lrv(monkeypatch):
+    monkeypatch.setattr(app, "get_models_dir", lambda: "/models")
+
+    state = app._build_merge_form_state_from_config(
+        {
+            "models": [
+                {
+                    "left": "/models/ModelA",
+                    "right": "/models/ModelB",
+                    "strategy": "mix",
+                    "target_strategy": "mix",
+                    "velocity": 0.4,
+                }
+            ],
+        },
+        available_models=["ModelA", "ModelB"],
+    )
+
+    assert state["model_a"]["value"] == "ModelA"
+    assert state["model_b"]["value"] == "ModelB"
+    assert state["model_c"]["value"] == "選択しない"
+    assert state["left_right_velocity"] == "0.4"
+    assert state["use_advanced_options"] is True
+    assert state["lazy_load"] is True

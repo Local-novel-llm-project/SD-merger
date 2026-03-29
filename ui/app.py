@@ -20,16 +20,23 @@ from ui.components.lora_ops import render_lora_ops_tab
 from ui.components.poison_merge import render_poison_merge_tab
 from ui.components.arthemy_tuner import render_arthemy_tuner_tab
 from ui.components.ab_test import render_ab_test_tab
-from ui.utils import enqueue_merge_task, get_model_list, get_model_path
+from ui.utils import enqueue_merge_task, get_model_list, get_model_path, get_models_dir
 
 from module.error_messages import build_user_error_message
+from module.history import load_history
 from ui.components.queue_ui import render_queue_tab
 from ui.components.bayesian_merger import create_bayesian_merger_ui
 from module.queue_manager import queue_manager
+from ui.merge_config import (
+    get_primary_model_config,
+    resolve_left_right_velocity,
+    resolve_output_name,
+)
 
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7860
+DEFAULT_OUTPUT_FILENAME = "merged_model.safetensors"
 
 
 def create_arg_parser() -> argparse.ArgumentParser:
@@ -96,6 +103,113 @@ def _parse_optional_float(value: object, *, field_name: str) -> float | None:
         return float(text)
     except ValueError as exc:
         raise ValueError(f"{field_name} must be a valid number.") from exc
+
+
+def _coerce_float(value: object, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _resolve_model_dropdown_value(model_path: object, available_models: list[str]) -> str | None:
+    if not model_path:
+        return None
+
+    raw_value = str(model_path)
+    if raw_value in available_models:
+        return raw_value
+
+    models_dir = os.path.abspath(get_models_dir())
+    candidate_path = os.path.abspath(raw_value)
+    try:
+        if os.path.commonpath([models_dir, candidate_path]) == models_dir:
+            relative_path = os.path.relpath(candidate_path, models_dir)
+            if relative_path not in ("", "."):
+                return relative_path
+    except ValueError:
+        pass
+
+    normalized_raw_value = os.path.normcase(os.path.normpath(raw_value))
+    for model_name in available_models:
+        if os.path.normcase(os.path.normpath(model_name)) == normalized_raw_value:
+            return model_name
+
+    basename = os.path.basename(raw_value)
+    basename_matches = [
+        model_name
+        for model_name in available_models
+        if os.path.basename(model_name) == basename
+    ]
+    if len(basename_matches) == 1:
+        return basename_matches[0]
+
+    return raw_value
+
+
+def _build_model_dropdown_payload(
+    model_path: object,
+    available_models: list[str],
+    *,
+    allow_none_choice: bool = False,
+) -> dict:
+    choices = list(available_models)
+    if allow_none_choice:
+        choices = ["選択しない"] + choices
+
+    value = _resolve_model_dropdown_value(model_path, available_models)
+    if value is None and allow_none_choice:
+        value = "選択しない"
+
+    if value not in (None, "", "選択しない") and value not in choices:
+        choices.append(value)
+
+    return {
+        "choices": choices,
+        "value": value,
+    }
+
+
+def _build_merge_form_state_from_config(
+    config: dict,
+    available_models: list[str] | None = None,
+) -> dict:
+    model_choices = list(available_models) if available_models is not None else get_model_list()
+    model_config = get_primary_model_config(config)
+    resolved_lrv = resolve_left_right_velocity(config, model_config)
+    explicit_output_name = config.get("output_name") or model_config.get("output_name")
+
+    return {
+        "model_a": _build_model_dropdown_payload(model_config.get("left"), model_choices),
+        "model_b": _build_model_dropdown_payload(model_config.get("right"), model_choices),
+        "model_c": _build_model_dropdown_payload(
+            config.get("target_model"),
+            model_choices,
+            allow_none_choice=True,
+        ),
+        "strategy": str(model_config.get("strategy", "mix") or "mix"),
+        "target_strategy": str(model_config.get("target_strategy", "mix") or "mix"),
+        "velocity": _coerce_float(model_config.get("velocity", 0.5), 0.5),
+        "use_advanced_options": any(
+            (
+                model_config.get("mbw"),
+                resolved_lrv not in ("", None),
+                config.get("bake_in_vae"),
+                explicit_output_name,
+                config.get("lazy_load", True) is False,
+            )
+        ),
+        "mbw": "" if model_config.get("mbw") is None else str(model_config.get("mbw")),
+        "left_right_velocity": (
+            "" if resolved_lrv in ("", None) else str(resolved_lrv)
+        ),
+        "bake_in_vae": _build_model_dropdown_payload(
+            config.get("bake_in_vae"),
+            model_choices,
+        ),
+        "output_name": resolve_output_name(config, DEFAULT_OUTPUT_FILENAME),
+        "lazy_load": bool(config.get("lazy_load", True)),
+    }
 
 
 def _build_merge_task_config(
@@ -281,7 +395,7 @@ def create_ui():
                         )
                         bake_in_vae = gr.Dropdown(label="Bake in VAE", choices=get_model_list())
                         output_name = gr.Textbox(
-                            label="Output Filename", value="merged_model.safetensors"
+                            label="Output Filename", value=DEFAULT_OUTPUT_FILENAME
                         )
                         lazy_load_opt = gr.Checkbox(
                             label="Enable Lazy Load (Memory saving)", value=True
@@ -360,7 +474,89 @@ def create_ui():
 
             # タブ 7: History
             with gr.TabItem("History"):
-                history_refresh_btn, history_rerun_btn, history_table = render_history_tab()
+                (
+                    history_refresh_btn,
+                    history_load_btn,
+                    history_rerun_btn,
+                    history_table,
+                    history_selected_index,
+                ) = render_history_tab()
+
+                def load_history_selection_into_merge_form(idx):
+                    if idx < 0:
+                        return (
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            "履歴の行を選択してから読み込んでください。",
+                        )
+
+                    history = load_history()
+                    if idx >= len(history):
+                        return (
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            gr.skip(),
+                            "選択された履歴が見つかりませんでした。履歴を更新してから再試行してください。",
+                        )
+
+                    entry = history[idx]
+                    state = _build_merge_form_state_from_config(entry.get("config", {}))
+                    output_label = entry.get("output_name") or state["output_name"]
+
+                    return (
+                        gr.update(**state["model_a"]),
+                        gr.update(**state["model_b"]),
+                        gr.update(**state["model_c"]),
+                        state["strategy"],
+                        state["target_strategy"],
+                        state["velocity"],
+                        state["use_advanced_options"],
+                        state["mbw"],
+                        state["left_right_velocity"],
+                        gr.update(**state["bake_in_vae"]),
+                        state["output_name"],
+                        state["lazy_load"],
+                        f"履歴から '{output_label}' の設定を Merge Models に読み込みました。",
+                    )
+
+                history_load_btn.click(
+                    load_history_selection_into_merge_form,
+                    inputs=[history_selected_index],
+                    outputs=[
+                        model_a,
+                        model_b,
+                        model_c,
+                        strategy,
+                        target_strategy,
+                        velocity,
+                        use_advanced_options,
+                        mbw_str,
+                        left_right_velocity,
+                        bake_in_vae,
+                        output_name,
+                        lazy_load_opt,
+                        merge_output,
+                    ],
+                )
 
             # タブ 8: XYZ Plot
             with gr.TabItem("XYZ Plot"):
