@@ -108,6 +108,19 @@ def test_remove_task_returns_false_for_missing_id(monkeypatch):
         manager.queue = original_queue
 
 
+def test_remove_task_returns_false_for_running_task(monkeypatch):
+    manager = queue_manager.queue_manager
+    original_queue = manager.queue
+    manager.queue = [{"id": "running-1", "status": "running"}]
+    monkeypatch.setattr(manager, "save_queue", lambda: None)
+
+    try:
+        assert manager.remove_task("running-1") is False
+        assert manager.queue == [{"id": "running-1", "status": "running"}]
+    finally:
+        manager.queue = original_queue
+
+
 def test_task_history_finalization_preserves_post_merge_updates(monkeypatch):
     runtime_dir = _make_runtime_dir("queue_history")
     history_file = runtime_dir / "merge_history.json"

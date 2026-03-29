@@ -47,15 +47,20 @@ class MergeState(rx.State):
         self.refresh_preview()
 
     def refresh_models(self) -> None:
-        self.available_models = list_models()
-        if self.model_a and self.model_a not in self.available_models:
-            self.model_a = ""
-        if self.model_b and self.model_b not in self.available_models:
-            self.model_b = ""
-        if self.model_c not in {"", "選択しない"} and self.model_c not in self.available_models:
-            self.model_c = "選択しない"
-        if self.bake_in_vae and self.bake_in_vae not in self.available_models:
-            self.bake_in_vae = ""
+        try:
+            self.available_models = list_models()
+            if self.model_a and self.model_a not in self.available_models:
+                self.model_a = ""
+            if self.model_b and self.model_b not in self.available_models:
+                self.model_b = ""
+            if self.model_c not in {"", "選択しない"} and self.model_c not in self.available_models:
+                self.model_c = "選択しない"
+            if self.bake_in_vae and self.bake_in_vae not in self.available_models:
+                self.bake_in_vae = ""
+            self.status_message = f"Loaded {len(self.available_models)} models."
+        except Exception as exc:
+            self.available_models = []
+            self.status_message = str(exc)
 
     def set_model_a_value(self, value: str) -> None:
         self.model_a = value
@@ -149,20 +154,23 @@ class MergeState(rx.State):
             )
 
     def queue_current_merge(self) -> None:
-        config, output_name = build_basic_merge_config(
-            self.model_a,
-            self.model_b,
-            self.model_c,
-            self.strategy,
-            self.target_strategy,
-            float(self.velocity),
-            self.left_right_velocity,
-            self.use_advanced_options,
-            self.mbw,
-            self.bake_in_vae,
-            self.output_name,
-            self.lazy_load,
-        )
-        self.last_task_id = queue_merge(config, output_name)
-        self.status_message = f"Queued merge task: {self.last_task_id}"
-        self.preview_json = build_preview_json(config)
+        try:
+            config, output_name = build_basic_merge_config(
+                self.model_a,
+                self.model_b,
+                self.model_c,
+                self.strategy,
+                self.target_strategy,
+                float(self.velocity),
+                self.left_right_velocity,
+                self.use_advanced_options,
+                self.mbw,
+                self.bake_in_vae,
+                self.output_name,
+                self.lazy_load,
+            )
+            self.last_task_id = queue_merge(config, output_name)
+            self.status_message = f"Queued merge task: {self.last_task_id}"
+            self.preview_json = build_preview_json(config)
+        except Exception as exc:
+            self.status_message = str(exc)
