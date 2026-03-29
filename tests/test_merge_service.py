@@ -59,3 +59,47 @@ def test_build_basic_merge_config_includes_optional_fields(monkeypatch):
     assert config["bake_in_vae"] == "/models/vae.safetensors"
     assert config["output_name"] == "merged.safetensors"
     assert output_name == "merged.safetensors"
+
+
+def test_build_merge_preview_returns_hint_when_models_missing():
+    preview = merge_service.build_merge_preview(
+        "",
+        "",
+        "選択しない",
+        "mix",
+        "mix",
+        "0.5",
+        "",
+        False,
+        "",
+        "",
+        "",
+        True,
+    )
+
+    assert "hint" in preview
+
+
+def test_build_merge_preview_returns_error_json(monkeypatch):
+    monkeypatch.setattr(
+        merge_service,
+        "build_basic_merge_config",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("bad input")),
+    )
+
+    preview = merge_service.build_merge_preview(
+        "ModelA",
+        "ModelB",
+        "選択しない",
+        "mix",
+        "mix",
+        "0.5",
+        "",
+        False,
+        "",
+        "",
+        "",
+        True,
+    )
+
+    assert "bad input" in preview

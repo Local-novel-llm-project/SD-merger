@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 
 from module.utility import generate_filename
+from ui.services.execution_service import enqueue_merge_task
 from ui.services.model_service import resolve_model_path
-from ui.utils import enqueue_merge_task
 
 MERGE_STRATEGIES = [
     "addition",
@@ -127,6 +127,51 @@ def build_basic_merge_config(
 
 def build_preview_json(config: dict) -> str:
     return json.dumps(config, indent=2, ensure_ascii=False)
+
+
+def build_merge_preview(
+    model_a: str,
+    model_b: str,
+    model_c: str | None,
+    strategy: str,
+    target_strategy: str,
+    velocity: str,
+    left_right_velocity: str | None,
+    use_advanced_options: bool,
+    mbw: str | None,
+    bake_in_vae: str | None,
+    output_name: str | None,
+    lazy_load: bool,
+) -> str:
+    if not model_a or not model_b:
+        return json.dumps(
+            {"hint": "Model A と Model B を選ぶと設定プレビューを表示します。"},
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    try:
+        config, _ = build_basic_merge_config(
+            model_a,
+            model_b,
+            model_c,
+            strategy,
+            target_strategy,
+            float(velocity),
+            left_right_velocity,
+            use_advanced_options,
+            mbw,
+            bake_in_vae,
+            output_name,
+            lazy_load,
+        )
+        return build_preview_json(config)
+    except Exception as exc:
+        return json.dumps(
+            {"error": str(exc)},
+            indent=2,
+            ensure_ascii=False,
+        )
 
 
 def queue_merge(config: dict, output_name: str, *, task_name: str = "Merge Models") -> str:

@@ -259,3 +259,18 @@ models:
     assert task_id == "task-123"
     assert output_name == "rerun_output.safetensors"
     assert calls["output_name"] == "rerun_output.safetensors"
+
+
+def test_import_recipe_yaml_parses_mapping():
+    recipe = history_service.import_recipe_yaml("models:\n  - left: a\n    right: b\n")
+
+    assert recipe == {"models": [{"left": "a", "right": "b"}]}
+
+
+def test_import_recipe_yaml_rejects_non_mapping():
+    try:
+        history_service.import_recipe_yaml("- just\n- a\n- list\n")
+    except ValueError as exc:
+        assert "mapping" in str(exc)
+    else:
+        raise AssertionError("ValueError was not raised")

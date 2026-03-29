@@ -25,6 +25,7 @@ class HistoryState(rx.State):
     yaml_preview: str = "# Select an output name to inspect its recipe."
     yaml_editor_text: str = ""
     status_message: str = ""
+    status_variant: str = "info"
     import_path: str = ""
     export_path: str = ""
     yaml_source_label: str = ""
@@ -57,20 +58,25 @@ class HistoryState(rx.State):
     def load_yaml_preview(self) -> None:
         if not self.selected_output_name.strip():
             self.status_message = "Output Name を入力してください。"
+            self.status_variant = "error"
             return
+
         output_name = self.selected_output_name.strip()
         self.yaml_preview = build_history_yaml(output_name)
         self.yaml_editor_text = self.yaml_preview
         self.yaml_source_label = f"History: {output_name}"
         self.status_message = f"Loaded recipe: {output_name}"
+        self.status_variant = "success"
 
     def validate_yaml_editor(self) -> None:
         parse_history_yaml_text(self.yaml_editor_text)
         self.status_message = "YAML validation succeeded."
+        self.status_variant = "success"
 
     async def handle_yaml_upload(self, files: list[rx.UploadFile]):
         if not files:
             self.status_message = "YAML file was not selected."
+            self.status_variant = "error"
             return None
 
         upload = files[0]
@@ -79,6 +85,7 @@ class HistoryState(rx.State):
         self.yaml_preview = self.yaml_editor_text
         self.yaml_source_label = f"Upload: {upload.filename}"
         self.status_message = f"Imported YAML from upload: {upload.filename}"
+        self.status_variant = "success"
         return rx.clear_selected_files(HISTORY_YAML_UPLOAD_ID)
 
     def import_yaml_from_path(self) -> None:
@@ -87,20 +94,25 @@ class HistoryState(rx.State):
         self.yaml_preview = yaml_text
         self.yaml_source_label = f"Path: {self.import_path.strip()}"
         self.status_message = f"Imported YAML from path: {self.import_path.strip()}"
+        self.status_variant = "success"
 
     def export_selected_history_to_path(self) -> None:
         if not self.selected_output_name.strip():
             self.status_message = "Output Name を入力してください。"
+            self.status_variant = "error"
             return
+
         exported_path = export_history_entry_to_path(
             self.selected_output_name.strip(),
             self.export_path,
         )
         self.status_message = f"Exported history YAML: {exported_path}"
+        self.status_variant = "success"
 
     def export_editor_to_path(self) -> None:
         exported_path = export_yaml_to_path(self.yaml_editor_text, self.export_path)
         self.status_message = f"Exported edited YAML: {exported_path}"
+        self.status_variant = "success"
 
     def download_yaml(self):
         data, filename = build_yaml_download_payload(
@@ -108,6 +120,7 @@ class HistoryState(rx.State):
             self.selected_output_name or self.yaml_source_label,
         )
         self.status_message = f"Downloading YAML: {filename}"
+        self.status_variant = "info"
         return rx.download(data=data, filename=filename)
 
     def rerun_selected(self) -> None:
@@ -118,4 +131,5 @@ class HistoryState(rx.State):
         )
         self.selected_output_name = resolved_output_name
         self.status_message = f"Queued rerun task: {task_id}"
+        self.status_variant = "success"
         self.refresh()

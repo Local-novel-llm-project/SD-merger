@@ -6,7 +6,13 @@ import reflex as rx
 
 from ui.services.app_boot import ensure_app_ready
 from ui.services.model_service import list_models
-from ui.services.tuning_service import build_tuning_config, list_modes, queue_tuning
+from ui.services.tuning_service import (
+    build_tuning_config,
+    build_tuning_preview,
+    list_modes,
+    parse_optional_float,
+    queue_tuning,
+)
 
 
 class TuneState(rx.State):
@@ -22,6 +28,7 @@ class TuneState(rx.State):
 
     preview_json: str = "{}"
     status_message: str = ""
+    status_variant: str = "info"
     last_task_id: str = ""
 
     def load_page(self) -> None:
@@ -53,47 +60,26 @@ class TuneState(rx.State):
         self.output_name = value
         self.refresh_preview()
 
-    def _parse_optional_float(self, value: str) -> float | None:
-        text = value.strip()
-        if not text:
-            return None
-        return float(text)
-
     def refresh_preview(self) -> None:
-        try:
-            if not self.target_model:
-                self.preview_json = json.dumps(
-                    {"hint": "Target Model を選ぶと設定プレビューを表示します。"},
-                    indent=2,
-                    ensure_ascii=False,
-                )
-                return
-
-            config, _ = build_tuning_config(
-                self.target_model,
-                self.mode,
-                self._parse_optional_float(self.clip_base_scale),
-                self._parse_optional_float(self.unet_base_scale),
-                self.vectors_override,
-                self.output_name,
-            )
-            self.preview_json = json.dumps(config, indent=2, ensure_ascii=False)
-        except Exception as exc:
-            self.preview_json = json.dumps(
-                {"error": str(exc)},
-                indent=2,
-                ensure_ascii=False,
-            )
+        self.preview_json = build_tuning_preview(
+            self.target_model,
+            self.mode,
+            self.clip_base_scale,
+            self.unet_base_scale,
+            self.vectors_override,
+            self.output_name,
+        )
 
     def queue_tuning_job(self) -> None:
         config, output_name = build_tuning_config(
             self.target_model,
             self.mode,
-            self._parse_optional_float(self.clip_base_scale),
-            self._parse_optional_float(self.unet_base_scale),
+            parse_optional_float(self.clip_base_scale),
+            parse_optional_float(self.unet_base_scale),
             self.vectors_override,
             self.output_name,
         )
         self.last_task_id = queue_tuning(config, output_name)
         self.status_message = f"Queued Arthemy Tuning task: {self.last_task_id}"
+        self.status_variant = "success"
         self.preview_json = json.dumps(config, indent=2, ensure_ascii=False)

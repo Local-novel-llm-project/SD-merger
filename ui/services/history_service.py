@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from module.config_schema import MergeConfig
 from module.history import export_recipe, history_to_yaml, load_history
-from ui.utils import enqueue_merge_task
+from ui.services.execution_service import enqueue_merge_task
 
 
 def _paths_match(left: object, right: object) -> bool:
@@ -118,17 +118,27 @@ def build_history_yaml(output_name: str) -> str:
     return history_to_yaml(get_history_entry(output_name))
 
 
+def export_history_recipe(output_name: str, filepath: str) -> None:
+    export_recipe(get_history_entry(output_name), filepath)
+
+
+def import_recipe_yaml(yaml_text: str) -> dict:
+    loaded = yaml.safe_load(yaml_text)
+    if loaded is None:
+        return {}
+    if not isinstance(loaded, dict):
+        raise ValueError("Recipe YAML must contain a mapping at the top level.")
+    return loaded
+
+
 def parse_history_yaml_text(yaml_text: str) -> dict[str, Any]:
     if not yaml_text.strip():
         raise ValueError("YAML is empty.")
 
     try:
-        loaded = yaml.safe_load(yaml_text)
+        loaded = import_recipe_yaml(yaml_text)
     except yaml.YAMLError as exc:
         raise ValueError(f"YAML parse error: {exc}") from exc
-
-    if not isinstance(loaded, dict):
-        raise ValueError("YAML root must be a mapping.")
 
     try:
         return MergeConfig(**loaded).model_dump()
@@ -175,13 +185,12 @@ def export_yaml_to_path(yaml_text: str, path_text: str) -> str:
 
 
 def export_history_entry_to_path(output_name: str, path_text: str) -> str:
-    entry = get_history_entry(output_name)
     path = Path(path_text.strip())
     if not path.name:
         raise ValueError("Export path is required.")
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    export_recipe(entry, str(path))
+    export_history_recipe(output_name, str(path))
     return str(path)
 
 
@@ -201,7 +210,6 @@ def build_yaml_download_payload(
 
 def rerun_history_entry(output_name: str) -> str:
     entry = get_history_entry(output_name)
-
     config = deepcopy(entry.get("config") or {})
     if not config:
         raise ValueError("Selected history entry does not contain a runnable config.")

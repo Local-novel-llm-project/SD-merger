@@ -21,6 +21,7 @@ class QueueState(rx.State):
     queue_paused: bool = False
     selected_task_id: str = ""
     status_message: str = ""
+    status_variant: str = "info"
     task_count: int = 0
     last_updated_at: str = ""
     polling_enabled: bool = False
@@ -64,25 +65,30 @@ class QueueState(rx.State):
     def pause(self) -> None:
         _, message = pause_queue()
         self.status_message = message
+        self.status_variant = "info"
         self.refresh()
 
     def resume(self) -> None:
         _, message = resume_queue()
         self.status_message = message
+        self.status_variant = "success"
         self.refresh()
 
     def clear_completed_items(self) -> None:
         _, message = clear_completed()
         self.status_message = message
+        self.status_variant = "success"
         self.refresh()
 
     def remove_selected_task(self) -> None:
         if not self.selected_task_id.strip():
             self.status_message = "Task ID を入力してください。"
+            self.status_variant = "error"
             return
 
-        _, message = remove_task(self.selected_task_id.strip())
+        ok, message = remove_task(self.selected_task_id.strip())
         self.status_message = message
+        self.status_variant = "success" if ok else "error"
         self.refresh()
 
     @rx.event(background=True)
