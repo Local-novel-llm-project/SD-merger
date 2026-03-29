@@ -3,8 +3,10 @@ from __future__ import annotations
 import os
 from copy import deepcopy
 
-from module.history import history_to_yaml, load_history
-from ui.utils import enqueue_merge_task
+import yaml
+
+from module.history import export_recipe, history_to_yaml, load_history
+from ui.services.execution_service import enqueue_merge_task
 
 
 def _paths_match(left: object, right: object) -> bool:
@@ -90,6 +92,22 @@ def build_history_yaml(output_name: str) -> str:
     if entry is None:
         raise ValueError(f"History entry was not found: {output_name}")
     return history_to_yaml(entry)
+
+
+def export_history_recipe(output_name: str, filepath: str) -> None:
+    entry = find_history_entry(output_name)
+    if entry is None:
+        raise ValueError(f"History entry was not found: {output_name}")
+    export_recipe(entry, filepath)
+
+
+def import_recipe_yaml(yaml_text: str) -> dict:
+    loaded = yaml.safe_load(yaml_text)
+    if loaded is None:
+        return {}
+    if not isinstance(loaded, dict):
+        raise ValueError("Recipe YAML must contain a mapping at the top level.")
+    return loaded
 
 
 def rerun_history_entry(output_name: str) -> str:
