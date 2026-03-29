@@ -51,6 +51,7 @@ class HistoryState(rx.State):
     def set_yaml_editor_text(self, value: str) -> None:
         self.yaml_editor_text = value
 
+    @rx.event
     def select_history_entry(self, output_name: str) -> None:
         self.selected_output_name = output_name
         self.load_yaml_preview()
@@ -73,6 +74,7 @@ class HistoryState(rx.State):
         self.status_message = "YAML validation succeeded."
         self.status_variant = "success"
 
+    @rx.event
     async def handle_yaml_upload(self, files: list[rx.UploadFile]):
         if not files:
             self.status_message = "YAML file was not selected."

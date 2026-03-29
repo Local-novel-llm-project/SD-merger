@@ -37,6 +37,7 @@ class QueueState(rx.State):
     def set_selected_task_id(self, value: str) -> None:
         self.selected_task_id = value
 
+    @rx.event
     def select_task(self, task_id: str) -> None:
         self.selected_task_id = task_id
 
