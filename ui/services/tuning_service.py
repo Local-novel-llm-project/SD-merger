@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from module.arthemy_tuner_config import ARTHEMY_TUNER_MODES, build_arthemy_tune_job_config
 from ui.services.execution_service import enqueue_merge_task
@@ -23,8 +24,10 @@ def build_tuning_config(
     if not target_model_path:
         raise ValueError("Target Model is required.")
 
-    clip_overrides = {"base_scale": clip_base_scale} if clip_base_scale is not None else None
-    unet_overrides = {"base_scale": unet_base_scale}
+    clip_overrides: dict[str, Any] | None = (
+        {"base_scale": clip_base_scale} if clip_base_scale is not None else None
+    )
+    unet_overrides: dict[str, Any] = {"base_scale": unet_base_scale}
     if vectors_override:
         unet_overrides["vectors_override"] = vectors_override
 

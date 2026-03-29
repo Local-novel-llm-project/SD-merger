@@ -13,6 +13,12 @@ def _queue_row(row: dict[str, str]) -> rx.Component:
             rx.text(row["name"]),
             rx.text(row["status"]),
             rx.text(row["progress"]),
+            rx.button(
+                "Select",
+                size="1",
+                variant="soft",
+                on_click=QueueState.select_task(row["id"]),
+            ),
             spacing="3",
             width="100%",
         ),
@@ -28,7 +34,7 @@ def queue_page() -> rx.Component:
     return page_shell(
         "Queue",
         section_card(
-            rx.text("バックグラウンドで処理されるマージタスクを確認します。"),
+            rx.text("バックグラウンドで処理されるマージタスクを確認します。Queue 画面は自動更新されます。"),
             rx.hstack(
                 rx.button("Refresh", on_click=QueueState.refresh),
                 rx.button("Pause", on_click=QueueState.pause),
@@ -38,6 +44,9 @@ def queue_page() -> rx.Component:
                 wrap="wrap",
             ),
             rx.text(f"Paused: {QueueState.queue_paused}"),
+            rx.text(f"Task Count: {QueueState.task_count}"),
+            rx.text(f"Last Updated: {QueueState.last_updated_at}"),
+            rx.text(QueueState.selected_task_summary),
             rx.hstack(
                 rx.input(
                     placeholder="Task ID to remove",

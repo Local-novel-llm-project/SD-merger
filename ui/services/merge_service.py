@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from module.utility import generate_filename
 from ui.services.execution_service import enqueue_merge_task
@@ -67,7 +68,7 @@ def build_basic_merge_config(
     bake_in_vae: str | None,
     output_name: str | None,
     lazy_load: bool,
-) -> tuple[dict, str]:
+) -> tuple[dict[str, Any], str]:
     if not model_a or not model_b:
         raise ValueError("Model A and Model B are required.")
 
@@ -83,24 +84,23 @@ def build_basic_merge_config(
     if resolved_target_name and not target_model_path:
         raise ValueError("Selected models could not be resolved from the models directory.")
 
-    config = {
+    primary_model_config: dict[str, Any] = {
+        "left": left_model_path,
+        "right": right_model_path,
+        "strategy": strategy,
+        "target_strategy": target_strategy,
+        "velocity": float(velocity),
+        "key_patterns": ["."],
+    }
+    config: dict[str, Any] = {
         "lazy_load": lazy_load,
-        "models": [
-            {
-                "left": left_model_path,
-                "right": right_model_path,
-                "strategy": strategy,
-                "target_strategy": target_strategy,
-                "velocity": float(velocity),
-                "key_patterns": ["."],
-            }
-        ],
+        "models": [primary_model_config],
     }
     if target_model_path:
         config["target_model"] = target_model_path
 
     if use_advanced_options and mbw and mbw.strip():
-        config["models"][0]["mbw"] = mbw.strip()
+        primary_model_config["mbw"] = mbw.strip()
 
     if use_advanced_options:
         parsed_lrv = parse_optional_float(
@@ -108,7 +108,7 @@ def build_basic_merge_config(
             field_name="A/B Strategy Velocity",
         )
         if parsed_lrv is not None:
-            config["models"][0]["left_right_velocity"] = parsed_lrv
+            primary_model_config["left_right_velocity"] = parsed_lrv
 
     if use_advanced_options and bake_in_vae:
         vae_path = resolve_model_path(bake_in_vae)
@@ -125,7 +125,7 @@ def build_basic_merge_config(
     return config, resolved_output_name
 
 
-def build_preview_json(config: dict) -> str:
+def build_preview_json(config: dict[str, Any]) -> str:
     return json.dumps(config, indent=2, ensure_ascii=False)
 
 
@@ -174,5 +174,10 @@ def build_merge_preview(
         )
 
 
-def queue_merge(config: dict, output_name: str, *, task_name: str = "Merge Models") -> str:
+def queue_merge(
+    config: dict[str, Any],
+    output_name: str,
+    *,
+    task_name: str = "Merge Models",
+) -> str:
     return enqueue_merge_task(config, output_name, task_name)

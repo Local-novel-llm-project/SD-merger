@@ -1,3 +1,5 @@
+import pytest
+
 import ui.services.history_service as history_service
 
 
@@ -169,6 +171,94 @@ def test_build_history_rows_supports_lr_alias(monkeypatch):
     rows = history_service.build_history_rows()
 
     assert rows[0]["left_right_velocity"] == "0.9"
+
+
+def test_parse_history_yaml_text_validates_and_normalizes():
+    config = history_service.parse_history_yaml_text(
+        """
+lazy_load: true
+models:
+  - left: models/a.safetensors
+    right: models/b.safetensors
+    strategy: mix
+    velocity: 0.5
+"""
+    )
+
+    assert config["lazy_load"] is True
+    assert config["models"][0]["left"] == "models/a.safetensors"
+
+
+def test_parse_history_yaml_text_rejects_invalid_yaml():
+    with pytest.raises(ValueError, match="YAML parse error"):
+        history_service.parse_history_yaml_text("models: [")
+
+
+def test_load_yaml_from_path_reads_file(tmp_path):
+    yaml_path = tmp_path / "recipe.yaml"
+    yaml_path.write_text("models: []\n", encoding="utf-8")
+
+    assert history_service.load_yaml_from_path(str(yaml_path)) == "models: []\n"
+
+
+def test_export_yaml_to_path_writes_text(tmp_path):
+    yaml_path = tmp_path / "nested" / "recipe.yaml"
+
+    written_path = history_service.export_yaml_to_path("models: []\n", str(yaml_path))
+
+    assert written_path == str(yaml_path)
+    assert yaml_path.read_text(encoding="utf-8") == "models: []\n"
+
+
+def test_build_yaml_download_payload_uses_output_name():
+    data, filename = history_service.build_yaml_download_payload(
+        "models: []\n",
+        "merged.safetensors",
+    )
+
+    assert data == "models: []\n"
+    assert filename == "merged.yaml"
+
+
+def test_build_yaml_download_payload_sanitizes_filename():
+    _, filename = history_service.build_yaml_download_payload(
+        "models: []\n",
+        "Upload: merged output.safetensors",
+    )
+
+    assert filename == "Upload_merged_output.yaml"
+
+
+def test_queue_history_yaml_uses_resolved_output_name(monkeypatch):
+    calls = {}
+
+    monkeypatch.setattr(
+        history_service,
+        "enqueue_merge_task",
+        lambda config, output_name, task_name: calls.update(
+            {
+                "config": config,
+                "output_name": output_name,
+                "task_name": task_name,
+            }
+        )
+        or "task-123",
+    )
+
+    task_id, output_name = history_service.queue_history_yaml(
+        """
+output_name: rerun_output.safetensors
+models:
+  - left: models/a.safetensors
+    right: models/b.safetensors
+    strategy: mix
+    velocity: 0.5
+"""
+    )
+
+    assert task_id == "task-123"
+    assert output_name == "rerun_output.safetensors"
+    assert calls["output_name"] == "rerun_output.safetensors"
 
 
 def test_import_recipe_yaml_parses_mapping():
