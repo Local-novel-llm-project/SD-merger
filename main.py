@@ -545,8 +545,12 @@ def _add_tune_arguments(parser: argparse.ArgumentParser) -> None:
 
 def _add_ui_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--host", default="0.0.0.0", help="UI の bind host")
-    parser.add_argument("--port", type=int, default=7860, help="UI の listen port")
-    parser.add_argument("--share", action="store_true", help="Gradio share を有効化")
+    parser.add_argument("--port", type=int, default=3000, help="UI の listen port")
+    parser.add_argument(
+        "--share",
+        action="store_true",
+        help="互換オプション。Reflex UI では無視されます。",
+    )
 
 
 def _create_legacy_parser() -> argparse.ArgumentParser:
@@ -569,7 +573,7 @@ def _create_subcommand_parser() -> argparse.ArgumentParser:
     _add_tune_arguments(tune_parser)
     _add_debug_argument(tune_parser, default=argparse.SUPPRESS)
 
-    ui_parser = subparsers.add_parser("ui", help="Gradio UI を起動")
+    ui_parser = subparsers.add_parser("ui", help="Reflex UI を起動")
     _add_ui_arguments(ui_parser)
     _add_debug_argument(ui_parser, default=argparse.SUPPRESS)
 

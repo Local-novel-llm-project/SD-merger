@@ -6,9 +6,8 @@ rich>=13.0.0
 sd-mecha>=0.1.0
 
 # UI & Analysis
-gradio>=4.0.0
+reflex>=0.8.15
 matplotlib>=3.7.0
-pandas>=2.0.0
 
 # Image Generation Backend (Diffusers)
 diffusers>=0.31.0
