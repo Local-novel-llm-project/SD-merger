@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import reflex as rx
 
-from ui.services.app_boot import ensure_app_ready
-from ui.services.merge_service import (
+from module.services.merge import (
     MERGE_STRATEGIES,
     MERGE_VELOCITY_HELP,
     TARGET_STRATEGIES,
@@ -11,9 +10,10 @@ from ui.services.merge_service import (
     build_merge_preview,
     build_preview_json,
     create_default_output_name,
+    list_models,
     queue_merge,
 )
-from ui.services.model_service import list_models
+from ui.services.app_boot import ensure_app_ready
 
 
 class MergeState(rx.State):

@@ -2,6 +2,7 @@ import os
 import sys
 import types
 
+import module.services.merge as merge_services
 import ui.services.execution_service as execution_service
 import ui.utils as utils
 
@@ -20,7 +21,7 @@ def test_enqueue_merge_task_delegates_to_queue_manager(monkeypatch):
     fake_queue_module.queue_manager = FakeQueueManager()
     monkeypatch.setitem(sys.modules, "module.queue_manager", fake_queue_module)
 
-    task_id = execution_service.enqueue_merge_task(
+    task_id = merge_services.enqueue_merge_task(
         {"models": [{"left": "a", "right": "b"}]},
         "merged.safetensors",
         "Smoke Test",
@@ -65,27 +66,27 @@ def test_run_merge_from_config_loads_extensions_and_cleans_stale_outputs(monkeyp
     )
     monkeypatch.setitem(sys.modules, "main", fake_main_module)
     monkeypatch.setattr(
-        execution_service.os,
+        merge_services.queue_tasks.os,
         "makedirs",
         lambda path, exist_ok=True: created_dirs.append((path, exist_ok)),
     )
     monkeypatch.setattr(
-        execution_service.glob,
+        merge_services.queue_tasks.glob,
         "glob",
         lambda pattern: [stale_output],
     )
     monkeypatch.setattr(
-        execution_service.os.path,
+        merge_services.queue_tasks.os.path,
         "isfile",
         lambda path: path == stale_output,
     )
     monkeypatch.setattr(
-        execution_service.os,
+        merge_services.queue_tasks.os,
         "remove",
         lambda path: removed_files.append(path),
     )
 
-    result = execution_service.run_merge_from_config(
+    result = merge_services.run_merge_from_config(
         {"target_model": "model_a.safetensors", "models": []},
         "merged/test_execution_service",
     )
@@ -98,5 +99,7 @@ def test_run_merge_from_config_loads_extensions_and_cleans_stale_outputs(monkeyp
 
 
 def test_ui_utils_reexports_execution_helpers():
-    assert utils.enqueue_merge_task is execution_service.enqueue_merge_task
-    assert utils.run_merge_from_config is execution_service.run_merge_from_config
+    assert execution_service.enqueue_merge_task is merge_services.enqueue_merge_task
+    assert execution_service.run_merge_from_config is merge_services.run_merge_from_config
+    assert utils.enqueue_merge_task is merge_services.enqueue_merge_task
+    assert utils.run_merge_from_config is merge_services.run_merge_from_config
