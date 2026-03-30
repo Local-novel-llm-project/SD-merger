@@ -25,6 +25,12 @@ pip install -r requirements.txt
 Run the Reflex UI:
 
 ```bash
+reflex run
+```
+
+Or keep using the existing CLI launcher:
+
+```bash
 python main.py ui --port 3000
 ```
 
@@ -41,6 +47,7 @@ python main.py merge -c example/example.yaml
 - `ui/pages`: page composition for Merge, Queue, History, and Arthemy Tuner
 
 The UI reuses the existing core implementation in `main.py`, `module/*`, and `extensions/*`.
+Reflex now boots from the top-level `app` package, while the actual UI implementation remains under `ui/*`.
 
 ## CLI Commands
 

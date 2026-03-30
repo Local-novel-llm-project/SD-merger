@@ -76,18 +76,29 @@ def test_build_app_registers_navigation_routes(monkeypatch):
         monkeypatch.setitem(sys.modules, module_name, module)
 
     sys.modules.pop("ui.theme", None)
+    sys.modules.pop("app.app", None)
     sys.modules.pop("ui.ui", None)
+    app_module = importlib.import_module("app.app")
     ui_module = importlib.import_module("ui.ui")
 
-    assert [route for _, route, _ in ui_module.app.pages] == [
+    assert [route for _, route, _ in app_module.app.pages] == [
         "/",
         "/queue",
         "/history",
         "/tune",
     ]
-    assert [title for _, _, title in ui_module.app.pages] == [
+    assert [title for _, _, title in app_module.app.pages] == [
         "SD-merger",
         "Queue",
         "History",
         "Arthemy Tuner",
     ]
+    assert ui_module.app is app_module.app
+
+
+def test_rxconfig_uses_top_level_app_entrypoint():
+    import rxconfig
+
+    assert rxconfig.config.app_name == "app"
+    assert rxconfig.config.frontend_port == 3000
+    assert rxconfig.config.backend_port == 3001

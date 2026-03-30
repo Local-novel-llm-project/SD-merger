@@ -25,6 +25,12 @@ pip install -r requirements.txt
 Reflex UI を起動:
 
 ```bash
+reflex run
+```
+
+従来どおり CLI ランチャー経由でも起動できます:
+
+```bash
 python main.py ui --port 3000
 ```
 
@@ -41,6 +47,7 @@ python main.py merge -c example/example.yaml
 - `ui/pages`: Merge / Queue / History / Arthemy Tuner の画面定義
 
 コア処理は引き続き `main.py`、`module/*`、`extensions/*` を使います。
+Reflex の正面入口はトップレベルの `app` パッケージに寄せ、UI 本体の実装は `ui/*` に残します。
 
 ## CLI
 

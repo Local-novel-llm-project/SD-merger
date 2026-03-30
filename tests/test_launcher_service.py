@@ -69,3 +69,10 @@ def test_app_reexports_launcher_service_symbols():
 def test_project_root_points_to_repository_root():
     assert Path(app.PROJECT_ROOT, "main.py").exists()
     assert Path(app.PROJECT_ROOT, "rxconfig.py").exists()
+
+
+def test_top_level_reflex_app_module_exports_app():
+    from app import app as reflex_app_module
+
+    assert hasattr(reflex_app_module, "app")
+    assert reflex_app_module.build_app is not None
