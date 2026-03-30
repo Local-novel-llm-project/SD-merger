@@ -6,12 +6,12 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 from pydantic import ValidationError
 
 from module.config_schema import MergeConfig
 from module.history import export_recipe, history_to_yaml, load_history
-from ui.services.execution_service import enqueue_merge_task
+from module.services.merge import enqueue_merge_task
 
 
 def _paths_match(left: object, right: object) -> bool:

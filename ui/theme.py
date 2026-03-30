@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import reflex as rx
+from typing import Any, cast
 
 
 APP_THEME = {
@@ -14,4 +15,4 @@ APP_THEME = {
 
 
 def create_theme() -> rx.Component:
-    return rx.theme(**APP_THEME)
+    return rx.theme(**cast(dict[str, Any], APP_THEME))

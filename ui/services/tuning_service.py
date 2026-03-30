@@ -4,8 +4,7 @@ import json
 from typing import Any
 
 from module.arthemy_tuner_config import ARTHEMY_TUNER_MODES, build_arthemy_tune_job_config
-from ui.services.execution_service import enqueue_merge_task
-from ui.services.model_service import resolve_model_path
+from module.services.merge import enqueue_merge_task, resolve_model_path
 
 
 def list_modes() -> list[str]:

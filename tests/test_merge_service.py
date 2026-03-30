@@ -1,14 +1,16 @@
+import module.services.merge as merge_services
+from module.services.merge import config_builder
 import ui.services.merge_service as merge_service
 
 
 def test_build_basic_merge_config_omits_left_right_velocity_when_blank(monkeypatch):
     monkeypatch.setattr(
-        merge_service,
+        config_builder,
         "resolve_model_path",
         lambda name: f"/models/{name}" if name else None,
     )
 
-    config, output_name = merge_service.build_basic_merge_config(
+    config, output_name = config_builder.build_basic_merge_config(
         "ModelA",
         "ModelB",
         "選択しない",
@@ -33,12 +35,12 @@ def test_build_basic_merge_config_omits_left_right_velocity_when_blank(monkeypat
 
 def test_build_basic_merge_config_includes_optional_fields(monkeypatch):
     monkeypatch.setattr(
-        merge_service,
+        config_builder,
         "resolve_model_path",
         lambda name: f"/models/{name}" if name else None,
     )
 
-    config, output_name = merge_service.build_basic_merge_config(
+    config, output_name = config_builder.build_basic_merge_config(
         "ModelA",
         "ModelB",
         "ModelC",
@@ -62,7 +64,7 @@ def test_build_basic_merge_config_includes_optional_fields(monkeypatch):
 
 
 def test_build_merge_preview_returns_hint_when_models_missing():
-    preview = merge_service.build_merge_preview(
+    preview = config_builder.build_merge_preview(
         "",
         "",
         "選択しない",
@@ -82,12 +84,12 @@ def test_build_merge_preview_returns_hint_when_models_missing():
 
 def test_build_merge_preview_returns_error_json(monkeypatch):
     monkeypatch.setattr(
-        merge_service,
+        config_builder,
         "build_basic_merge_config",
         lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("bad input")),
     )
 
-    preview = merge_service.build_merge_preview(
+    preview = config_builder.build_merge_preview(
         "ModelA",
         "ModelB",
         "選択しない",
@@ -103,3 +105,9 @@ def test_build_merge_preview_returns_error_json(monkeypatch):
     )
 
     assert "bad input" in preview
+
+
+def test_ui_merge_service_reexports_new_helpers():
+    assert merge_service.build_basic_merge_config is merge_services.build_basic_merge_config
+    assert merge_service.build_merge_preview is merge_services.build_merge_preview
+    assert merge_service.queue_merge is merge_services.queue_merge

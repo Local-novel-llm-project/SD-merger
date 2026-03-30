@@ -124,7 +124,7 @@ def generate_radar_chart(metrics_data: Dict[str, Dict[str, float]], title: str =
     ax.set_rlabel_position(0)
 
     # Determine the min and max for the y-axis to make it consistent
-    all_values = []
+    all_values: list[float] = []
     for model_stats in metrics_data.values():
         all_values.extend(model_stats.values())
 

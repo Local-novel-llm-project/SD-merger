@@ -419,7 +419,7 @@ def _merge_recipe(recipe, *, output_path: str | None, dtype):
 
 
 def _build_clip_overrides_from_args(args: argparse.Namespace) -> dict[str, float]:
-    overrides = {}
+    overrides: dict[str, float] = {}
     for spec in CLIP_FIELD_SPECS:
         attr_name = "clip_base_scale" if spec["name"] == "base_scale" else spec["name"]
         value = getattr(args, attr_name, None)
@@ -759,7 +759,7 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
         validated_default_output_dir=validated_config.output_dir,
     )
 
-    save_model, output_path = _resolve_output_path(
+    should_save_model, output_path = _resolve_output_path(
         config, effective_output_dir, models, target_model_path
     )
 
@@ -801,9 +801,9 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
                     "sd-mecha returned an in-memory state_dict for non-sharded output. "
                     "Saving via local safetensors fallback."
                 )
-                from module.utility import save_model
+                from module.utility import save_model as persist_model
 
-                save_model(merge_result, output_path)
+                persist_model(merge_result, output_path)
         except Exception as e:
             logger.error(f"sd-mecha merging error: {e}")
             from module.exceptions import MergeError
@@ -812,7 +812,7 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
 
     logger.info("マージが完了しました。")
 
-    if save_model and final_config:
+    if should_save_model and final_config:
         config_output_path = (
             os.path.join(output_path, "config.json")
             if sharded_output
@@ -822,7 +822,7 @@ def run_merge_pipeline(raw_config: dict, default_output_dir: str = "./merged") -
         with open(config_output_path, "w", encoding="utf-8") as f:
             json.dump(final_config, f, indent=2)
 
-    if save_model:
+    if should_save_model:
         run_post_merge_hooks(config, output_path)
 
     return output_path

@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterator
 from collections.abc import Mapping
 
 
-class SDKeyWrapper(dict, Mapping):
+class SDKeyWrapper(Mapping[str, Any]):
     """SD モデルの state_dict をラップし、キー名の変換と設定ファイルの保持を行うクラス。
 
     SD 1.x 系の `cond_stage_model.` プレフィックスと
@@ -72,15 +72,15 @@ class SDKeyWrapper(dict, Mapping):
     def __len__(self) -> int:
         return len(self._d)
 
-    def keys(self) -> list:  # type: ignore
+    def keys(self) -> list[str]:
         return [self._convert_key(k) for k in self._d.keys()]
 
-    def items(self):  # type: ignore
+    def items(self) -> Iterator[tuple[str, Any]]:
         for k in self._d.keys():
             ck = self._convert_key(k)
             yield ck, self[ck]
 
-    def values(self):  # type: ignore
+    def values(self) -> Iterator[Any]:
         for k in self._d.keys():
             ck = self._convert_key(k)
             yield self[ck]

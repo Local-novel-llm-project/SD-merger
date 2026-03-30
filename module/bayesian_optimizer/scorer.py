@@ -1,4 +1,6 @@
 import os
+from typing import Any, Callable
+
 import requests
 import torch
 import torch.nn as nn
@@ -51,9 +53,9 @@ class AestheticScorer:
             raise ValueError(f"Unknown scorer method: {self.method}")
 
         self.model_path = self.model_dir / self.scorer_model_name
-        self.model = None
-        self.clip_model = None
-        self.clip_preprocess = None
+        self.model: AestheticPredictor | None = None
+        self.clip_model: Any | None = None
+        self.clip_preprocess: Callable[[Image.Image], torch.Tensor] | None = None
 
     def initialize(self):
         """モデルをダウンロードし、メモリにロードする"""
@@ -112,7 +114,9 @@ class AestheticScorer:
             device=self.device,
         )
 
-    def _get_image_features(self, image: Image.Image) -> torch.Tensor:
+    def _get_image_features(self, image: Image.Image) -> Any:
+        if self.clip_preprocess is None or self.clip_model is None:
+            raise RuntimeError("CLIP model is not initialized.")
         image_tensor = self.clip_preprocess(image).unsqueeze(0).to(self.device)
         with torch.no_grad():
             image_features = self.clip_model.encode_image(image_tensor)
@@ -123,6 +127,9 @@ class AestheticScorer:
         """単一の画像をスコアリングする"""
         if self.model is None or self.clip_model is None:
             self.initialize()
+        assert self.model is not None
+        assert self.clip_model is not None
+        assert self.clip_preprocess is not None
 
         image_features = self._get_image_features(image)
         score_tensor = self.model(

@@ -1,11 +1,23 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator, TypedDict
+
+
+class ArthemyFieldSpec(TypedDict):
+    name: str
+    label: str
+    description: str
+    default: float
+
+
+class ArthemySectionSpec(TypedDict):
+    title: str
+    fields: list[ArthemyFieldSpec]
 
 
 ARTHEMY_TUNER_MODES = ["Soft Value", "Real Value"]
 
-CLIP_FIELD_SPECS = [
+CLIP_FIELD_SPECS: list[ArthemyFieldSpec] = [
     {
         "name": "base_scale",
         "label": "CLIP Base Scale",
@@ -32,7 +44,7 @@ CLIP_FIELD_SPECS = [
     },
 ]
 
-UNET_SECTION_SPECS = [
+UNET_SECTION_SPECS: list[ArthemySectionSpec] = [
     {
         "title": "Input Blocks",
         "fields": [
@@ -117,11 +129,11 @@ UNET_SECTION_SPECS = [
 ]
 
 
-def _collect_defaults(specs: list[dict[str, Any]]) -> dict[str, float]:
+def _collect_defaults(specs: list[ArthemyFieldSpec]) -> dict[str, float]:
     return {spec["name"]: float(spec["default"]) for spec in specs}
 
 
-def _iter_unet_field_specs():
+def _iter_unet_field_specs() -> Iterator[ArthemyFieldSpec]:
     for section in UNET_SECTION_SPECS:
         for field in section["fields"]:
             yield field

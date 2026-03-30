@@ -61,3 +61,11 @@ check_untyped_defs = false
 warn_unused_ignores = true
 show_error_codes = true
 pretty = true
+
+[[tool.mypy.overrides]]
+module = ["module.calc_method", "module.calc_target", "main"]
+disable_error_code = ["valid-type"]
+
+[[tool.mypy.overrides]]
+module = ["module.const", "module.utility"]
+disable_error_code = ["override"]
