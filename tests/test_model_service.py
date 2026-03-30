@@ -7,16 +7,19 @@ import ui.utils as utils
 
 
 def test_list_models_scans_supported_extensions(monkeypatch):
-    monkeypatch.setattr(model_catalog, "get_models_dir", lambda: "C:\\models")
+    models_dir = os.path.join("repo_root", "models")
+    nested_dir = os.path.join(models_dir, "nested")
+
+    monkeypatch.setattr(model_catalog, "get_models_dir", lambda: models_dir)
     monkeypatch.setattr(
         model_catalog.os.path,
         "exists",
-        lambda path: path == "C:\\models",
+        lambda path: path == models_dir,
     )
 
     walk_rows = [
-        ("C:\\models", ["nested"], ["a.safetensors", "b.txt", "c.ckpt"]),
-        ("C:\\models\\nested", [], ["d.pt", "e.bin"]),
+        (models_dir, ["nested"], ["a.safetensors", "b.txt", "c.ckpt"]),
+        (nested_dir, [], ["d.pt", "e.bin"]),
     ]
     monkeypatch.setattr(
         model_catalog.os,
@@ -35,9 +38,13 @@ def test_list_models_scans_supported_extensions(monkeypatch):
 
 
 def test_resolve_model_path_joins_models_dir(monkeypatch):
-    monkeypatch.setattr(model_catalog, "get_models_dir", lambda: "/repo/models")
+    models_dir = os.path.join("repo", "models")
+    monkeypatch.setattr(model_catalog, "get_models_dir", lambda: models_dir)
 
-    assert model_catalog.resolve_model_path("foo/bar.safetensors") == "/repo/models/foo/bar.safetensors"
+    assert model_catalog.resolve_model_path("foo/bar.safetensors") == os.path.join(
+        models_dir,
+        "foo/bar.safetensors",
+    )
 
 
 def test_ui_utils_reexports_model_helpers():
