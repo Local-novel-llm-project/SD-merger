@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import reflex as rx
 
-from ui.pages.common import page_shell, section_card
+from ui.pages.common import log_panel, page_shell, section_card
 from ui.state.merge_state import MergeState
 
 
@@ -32,9 +32,8 @@ def merge_page() -> rx.Component:
                 spacing="3",
                 wrap="wrap",
             ),
-            rx.text(f"Last Task ID: {MergeState.last_task_id}"),
-            rx.cond(MergeState.busy_message != "", rx.text(MergeState.busy_message)),
             title="Actions",
+            description="モデル一覧更新、プレビュー更新、キュー投入の主要操作をここに集約します。",
         ),
         section_card(
             rx.vstack(
@@ -123,19 +122,23 @@ def merge_page() -> rx.Component:
                 align="start",
             ),
             title="Merge Settings",
+            description="マージ対象、戦略、速度パラメータ、出力名を一括で編集します。",
         ),
         section_card(
-            rx.text_area(
-                value=MergeState.preview_json,
-                read_only=True,
-                min_height="24rem",
-                width="100%",
-            ),
+            log_panel(MergeState.preview_json, min_height="24rem"),
             title="Config Preview",
+            description="実際にキューへ送る設定 JSON を確認します。",
         ),
         current_route="/",
         description="モデル選択、速度パラメータ、出力名をまとめて管理し、生成される設定のプレビューを確認できます。",
         feedback_message=MergeState.status_message,
         feedback_variant=MergeState.status_variant,
+        busy_message=MergeState.busy_message,
+        header_actions=rx.vstack(
+            rx.text(f"Last Task ID: {MergeState.last_task_id}", color="#6a5b4d", size="2"),
+            rx.text("Queue-based merge workflow", color="#8b7a68", size="2"),
+            spacing="1",
+            align="end",
+        ),
         on_mount=MergeState.load_page,
     )
