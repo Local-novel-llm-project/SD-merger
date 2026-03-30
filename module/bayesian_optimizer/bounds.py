@@ -1,5 +1,5 @@
 import warnings
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # SD-mergerのブロック設定を使用
 NUM_TOTAL_BLOCKS = 12  # SD-merger uses IN00-11, OUT00-11
@@ -17,7 +17,7 @@ class Bounds:
 
     @staticmethod
     def default_bounds(
-        custom_ranges: Dict[str, Tuple[float, float]] = None,
+        custom_ranges: Optional[Dict[str, Tuple[float, float]]] = None,
     ) -> Dict[str, Tuple[float, float]]:
         """
         SD-mergerの26ブロック構成に基づくデフォルトの探索空間を生成
@@ -43,7 +43,7 @@ class Bounds:
 
     @staticmethod
     def freeze_bounds(
-        bounds: Dict[str, Tuple[float, float]], frozen: Dict[str, float] = None
+        bounds: Dict[str, Tuple[float, float]], frozen: Optional[Dict[str, float]] = None
     ) -> Dict[str, Tuple[float, float]]:
         """
         固定（Freeze）されたパラメータを探索空間から除外する
@@ -54,7 +54,7 @@ class Bounds:
 
     @staticmethod
     def group_bounds(
-        bounds: Dict[str, Tuple[float, float]], groups: List[List[str]] = None
+        bounds: Dict[str, Tuple[float, float]], groups: Optional[List[List[str]]] = None
     ) -> Dict[str, Tuple[float, float]]:
         """
         パラメータをグループ化（Group）し、同一の重みとして探索空間を縮小する
@@ -102,9 +102,9 @@ class Bounds:
 
     @staticmethod
     def get_bounds(
-        frozen_params: Dict[str, float] = None,
-        custom_ranges: Dict[str, Tuple[float, float]] = None,
-        groups: List[List[str]] = None,
+        frozen_params: Optional[Dict[str, float]] = None,
+        custom_ranges: Optional[Dict[str, Tuple[float, float]]] = None,
+        groups: Optional[List[List[str]]] = None,
     ) -> Dict[str, Tuple[float, float]]:
         """
         Freeze, Custom Range, Group をすべて適用した最終的な探索空間を取得
@@ -145,8 +145,8 @@ class Bounds:
     @staticmethod
     def assemble_params(
         params: Dict[str, float],
-        frozen: Dict[str, float] = None,
-        groups: List[List[str]] = None,
+        frozen: Optional[Dict[str, float]] = None,
+        groups: Optional[List[List[str]]] = None,
     ) -> Tuple[List[float], float]:
         """
         最適化エンジンの出力（パラーメータ）から、SD-merger用の25値リスト(mbw)とbase_alphaを構築する

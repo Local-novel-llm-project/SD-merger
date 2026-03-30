@@ -141,6 +141,7 @@ class QueueManager:
 
     _instance = None
     _lock = threading.Lock()
+    _initialized: bool = False
 
     def __new__(cls, *args, **kwargs):
         with cls._lock:

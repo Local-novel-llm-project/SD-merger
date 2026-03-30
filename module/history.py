@@ -168,13 +168,12 @@ def update_history_entry(output_name: str, update_dict: Dict[str, Any]) -> bool:
     with _HISTORY_LOCK:
         history = load_history()
         match_index = _find_history_entry_index(history, output_name)
-        updated = match_index is not None
+        if match_index is None:
+            return False
 
-        if updated:
-            history[match_index].update(update_dict)
-            _write_history(history)
-
-        return updated
+        history[match_index].update(update_dict)
+        _write_history(history)
+        return True
 
 
 def history_to_yaml(entry: dict) -> str:

@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import Tuple
 
 try:
-    from pydantic import ValidationError
+    from pydantic import ValidationError as PydanticValidationError
 except ImportError:  # pragma: no cover - pydantic is an installed dependency in normal runs
-    ValidationError = None  # type: ignore[assignment]
+    PydanticValidationError = None
 
 from module.exceptions import (
     ConfigError,
@@ -42,7 +42,7 @@ def _classify_exception(exc: Exception) -> Tuple[str, str]:
     root = _unwrap_exception(exc)
 
     if isinstance(exc, ConfigError) or (
-        ValidationError is not None and isinstance(root, ValidationError)
+        PydanticValidationError is not None and isinstance(root, PydanticValidationError)
     ):
         return (
             "設定内容に誤りがあります。",

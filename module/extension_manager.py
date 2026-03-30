@@ -1,7 +1,7 @@
 import os
 import sys
 import importlib
-from typing import Callable, Dict, List, Any
+from typing import Callable, Dict, List, Any, Optional
 
 from module.logging_config import logger
 from module.exceptions import ExtensionError
@@ -102,7 +102,7 @@ def run_post_merge_hooks(config: dict, output_path: str):
             )
 
 
-def load_extensions(extensions_dir: str = None):
+def load_extensions(extensions_dir: Optional[str] = None):
     """
     指定されたディレクトリ内の拡張機能を動的に読み込む。
     各拡張機能ディレクトリの `__init__.py` (またはメインモジュール) にある

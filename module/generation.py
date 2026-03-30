@@ -7,6 +7,7 @@ ComfyUI を必要とせずに画像生成を実行する。
 import collections
 import gc
 from pathlib import Path
+from typing import Protocol, cast
 
 import torch
 from PIL import Image
@@ -37,6 +38,18 @@ _SCHEDULER_MAP: dict[str, str] = {
     "uni_pc": "UniPCMultistepScheduler",
     "uni_pc_bh2": "UniPCMultistepScheduler",
 }
+
+
+class _MetaMaterializable(Protocol):
+    def _move_missing_keys_from_meta_to_device(
+        self,
+        meta_names: set[str],
+        device_map: dict[str, torch.device],
+        unexpected_keys: object,
+        hf_quantizer: object,
+    ) -> None: ...
+
+    def _initialize_missing_keys(self, has_quantizer: bool) -> None: ...
 
 
 def _find_meta_tensor_names(module: torch.nn.Module) -> set[str]:
@@ -75,13 +88,14 @@ def _materialize_meta_module(module: torch.nn.Module, device: str) -> None:
 
     hf_quantizer = getattr(module, "hf_quantizer", None)
     target_device = torch.device(device)
-    module._move_missing_keys_from_meta_to_device(  # type: ignore[attr-defined]
+    materializable = cast(_MetaMaterializable, module)
+    materializable._move_missing_keys_from_meta_to_device(
         meta_names,
         {"": target_device},
         None,
         hf_quantizer,
     )
-    module._initialize_missing_keys(hf_quantizer is not None)  # type: ignore[attr-defined]
+    materializable._initialize_missing_keys(hf_quantizer is not None)
 
     remaining_meta_names = _find_meta_tensor_names(module)
     if remaining_meta_names:

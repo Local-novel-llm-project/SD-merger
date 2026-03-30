@@ -1,5 +1,5 @@
 import os
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -36,7 +36,7 @@ def minwhere(li: List[float]) -> Tuple[int, float]:
 
 def convergence_plot(
     scores: List[float],
-    figname: PathT = None,
+    figname: Optional[PathT] = None,
     minimise=False,
 ) -> None:
     """

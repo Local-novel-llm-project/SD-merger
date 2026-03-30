@@ -5,6 +5,7 @@ sd-mecha の @merge_method デコレータを使用し、
 """
 
 import json
+from typing import Optional
 import torch
 from torch import Tensor
 from sd_mecha import merge_method, Parameter, Return
@@ -121,7 +122,7 @@ def replace_right_velocity(
     return b * velocity
 
 
-def get_calculation_strategy(strategy_name: str, replace_with: str = None):
+def get_calculation_strategy(strategy_name: str, replace_with: Optional[str] = None):
     """名前から計算ストラテジーメソッド(Callable)を取得する。
 
     Args:

@@ -8,7 +8,8 @@ import json
 from datetime import datetime
 import logging
 import os
-from typing import Any, Dict
+from collections.abc import Mapping
+from typing import Any, Dict, Iterator
 
 from safetensors.torch import save_file, load_file
 from safetensors import safe_open
@@ -70,21 +71,21 @@ def _build_model_initials(model_name: str) -> str:
     return initials or "model"
 
 
-class LazySafetensorsDict(dict):
+class LazySafetensorsDict(Mapping[str, Any]):
     """単一の safetensors ファイルからテンソルを遅延読み込みする辞書クラス。"""
 
     def __init__(self, path):
         self.f = safe_open(path, framework="pt", device="cpu")
         self._keys = self.f.keys()
 
-    def keys(self) -> list:  # type: ignore
+    def keys(self) -> list[str]:
         return self._keys
 
-    def items(self):  # type: ignore
+    def items(self) -> Iterator[tuple[str, Any]]:
         for k in self._keys:
             yield k, self.f.get_tensor(k)
 
-    def values(self):  # type: ignore
+    def values(self) -> Iterator[Any]:
         for k in self._keys:
             yield self.f.get_tensor(k)
 
@@ -101,7 +102,7 @@ class LazySafetensorsDict(dict):
         return key in self._keys
 
 
-class ShardedLazySafetensorsDict(dict):
+class ShardedLazySafetensorsDict(Mapping[str, Any]):
     """分割された safetensors ファイル群からテンソルを遅延読み込みする辞書クラス。"""
 
     def __init__(self, index_path: str):
@@ -112,14 +113,14 @@ class ShardedLazySafetensorsDict(dict):
         self.weight_map = index_data.get("weight_map", {})
         self._keys = list(self.weight_map.keys())
 
-    def keys(self) -> list:  # type: ignore
+    def keys(self) -> list[str]:
         return self._keys
 
-    def items(self):  # type: ignore
+    def items(self) -> Iterator[tuple[str, Any]]:
         for k in self._keys:
             yield k, self[k]
 
-    def values(self):  # type: ignore
+    def values(self) -> Iterator[Any]:
         for k in self._keys:
             yield self[k]
 
@@ -162,6 +163,7 @@ def load_model(
     """
     try:
         console.log(f"[bold green]モデルを読み込んでいます: {model_path}[/bold green]")
+        raw: Mapping[str, Any]
 
         # モデルパスと config.json の探索
         resolved_path = model_path
@@ -198,7 +200,7 @@ def load_model(
             if lazy_load:
                 raw = ShardedLazySafetensorsDict(index_path)
             else:
-                raw = {}
+                raw_state: dict[str, Any] = {}
                 base_dir = os.path.dirname(index_path)
                 with open(index_path, "r", encoding="utf-8") as f:
                     index_data = json.load(f)
@@ -207,7 +209,8 @@ def load_model(
                 for filename in unique_files:
                     file_path = os.path.join(base_dir, filename)
                     file_tensors = load_file(file_path, device="cpu")
-                    raw.update(file_tensors)
+                    raw_state.update(file_tensors)
+                raw = raw_state
         else:
             model_file_path = _normalize_model_path(resolved_path)
             # safetensors ではない場合は mmap を有効にして torch.load
