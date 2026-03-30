@@ -2,31 +2,26 @@ from __future__ import annotations
 
 import reflex as rx
 
-from ui.pages.common import page_shell, section_card
+from ui.pages.common import meta_badge, page_shell, record_row, section_card
 from ui.state.queue_state import QueueState
 
 
 def _queue_row(row: dict[str, str]) -> rx.Component:
-    return rx.vstack(
-        rx.hstack(
-            rx.code(row["id"]),
-            rx.text(row["name"]),
-            rx.text(row["status"]),
-            rx.text(row["progress"]),
-            rx.button(
-                "Select",
-                size="1",
-                variant="soft",
-                on_click=QueueState.select_task(row["id"]),
-            ),
-            spacing="3",
-            width="100%",
+    return record_row(
+        row["name"],
+        status=row["status"],
+        subtitle=row["desc"],
+        meta=[
+            meta_badge(row["id"]),
+            meta_badge(row["progress"]),
+            meta_badge(f"Output: {row['output_name']}"),
+        ],
+        action=rx.button(
+            "Select",
+            size="1",
+            variant="soft",
+            on_click=QueueState.select_task(row["id"]),
         ),
-        rx.text(f"Output: {row['output_name']}"),
-        rx.text(row["desc"]),
-        rx.divider(),
-        width="100%",
-        align="start",
     )
 
 
@@ -58,9 +53,6 @@ def queue_page() -> rx.Component:
                 spacing="3",
                 wrap="wrap",
             ),
-            rx.text(f"Paused: {QueueState.queue_paused}"),
-            rx.text(f"Task Count: {QueueState.task_count}"),
-            rx.text(f"Last Updated: {QueueState.last_updated_at}"),
             rx.text(QueueState.selected_task_summary),
             rx.hstack(
                 rx.input(
@@ -79,20 +71,30 @@ def queue_page() -> rx.Component:
                 width="100%",
                 spacing="3",
             ),
-            rx.cond(QueueState.busy_message != "", rx.text(QueueState.busy_message)),
             title="Queue Controls",
+            description="実行状態の確認、一時停止、再開、完了タスク整理、個別削除を扱います。",
         ),
         section_card(
             rx.vstack(
                 rx.foreach(QueueState.queue_rows, _queue_row),
                 width="100%",
                 align="start",
+                spacing="3",
             ),
             title="Tasks",
+            description="タスクの状態、進行状況、出力先を一覧で確認できます。",
         ),
         current_route="/queue",
         description="実行中タスクの一覧、停止状態、削除操作をひとつの導線で扱います。",
         feedback_message=QueueState.status_message,
         feedback_variant=QueueState.status_variant,
+        busy_message=QueueState.busy_message,
+        header_actions=rx.vstack(
+            rx.text(f"Task Count: {QueueState.task_count}", color="#6a5b4d", size="2"),
+            rx.text(f"Paused: {QueueState.queue_paused}", color="#6a5b4d", size="2"),
+            rx.text(f"Last Updated: {QueueState.last_updated_at}", color="#8b7a68", size="2"),
+            spacing="1",
+            align="end",
+        ),
         on_mount=QueueState.load_page,
     )

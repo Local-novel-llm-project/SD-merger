@@ -32,6 +32,9 @@ def test_app_theme_has_expected_tokens(monkeypatch):
     assert theme_module.APP_THEME["accent_color"] == "amber"
     assert theme_module.APP_THEME["radius"] == "large"
     assert theme_module.APP_THEME["scaling"] == "105%"
+    assert "panel_background" not in theme_module.APP_THEME
+    assert theme_module.THEME_TOKENS["accent"] == "#b7791f"
+    assert theme_module.THEME_TOKENS["content_width"] == "1360px"
 
 
 def test_feedback_style_falls_back_to_info(monkeypatch):
@@ -45,6 +48,20 @@ def test_feedback_style_falls_back_to_info(monkeypatch):
 
     assert feedback_module.feedback_style("success")["label"] == "Success"
     assert feedback_module.feedback_style("unknown") == feedback_module.feedback_style("info")
+
+
+def test_common_page_exports_include_new_layout_helpers(monkeypatch):
+    fake_reflex = types.ModuleType("reflex")
+    fake_reflex.Component = object
+
+    monkeypatch.setitem(sys.modules, "reflex", fake_reflex)
+    sys.modules.pop("ui.pages.common", None)
+    common_module = importlib.import_module("ui.pages.common")
+
+    assert "page_shell" in common_module.__all__
+    assert "status_strip" in common_module.__all__
+    assert "record_row" in common_module.__all__
+    assert "log_panel" in common_module.__all__
 
 
 def test_build_app_registers_navigation_routes(monkeypatch):

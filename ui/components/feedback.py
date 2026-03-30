@@ -2,32 +2,34 @@ from __future__ import annotations
 
 import reflex as rx
 
+from ui.theme import THEME_TOKENS
+
 
 FEEDBACK_VARIANTS = ("info", "success", "warning", "error")
 
 FEEDBACK_STYLES = {
     "info": {
-        "background": "#fff7e6",
-        "border_color": "#f59e0b",
-        "text_color": "#92400e",
+        "background": THEME_TOKENS["info_background"],
+        "border_color": THEME_TOKENS["info_border"],
+        "text_color": THEME_TOKENS["info_text"],
         "label": "Info",
     },
     "success": {
-        "background": "#eefbf3",
-        "border_color": "#16a34a",
-        "text_color": "#166534",
+        "background": THEME_TOKENS["success_background"],
+        "border_color": THEME_TOKENS["success_border"],
+        "text_color": THEME_TOKENS["success_text"],
         "label": "Success",
     },
     "warning": {
-        "background": "#fff4e5",
-        "border_color": "#ea580c",
-        "text_color": "#9a3412",
+        "background": THEME_TOKENS["warning_background"],
+        "border_color": THEME_TOKENS["warning_border"],
+        "text_color": THEME_TOKENS["warning_text"],
         "label": "Warning",
     },
     "error": {
-        "background": "#fff1f2",
-        "border_color": "#e11d48",
-        "text_color": "#9f1239",
+        "background": THEME_TOKENS["error_background"],
+        "border_color": THEME_TOKENS["error_border"],
+        "text_color": THEME_TOKENS["error_text"],
         "label": "Error",
     },
 }
@@ -52,7 +54,7 @@ def _feedback_box(message: str | rx.Var[str], variant: str) -> rx.Component:
         background=style["background"],
         border=f"1px solid {style['border_color']}",
         border_radius="14px",
-        box_shadow="0 10px 24px rgba(15, 23, 42, 0.05)",
+        box_shadow=THEME_TOKENS["panel_shadow"],
     )
 
 

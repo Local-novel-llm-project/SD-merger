@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import reflex as rx
 
-from ui.pages.common import page_shell, section_card
+from ui.pages.common import log_panel, page_shell, section_card
 from ui.state.tune_state import TuneState
 
 
@@ -26,9 +26,8 @@ def tune_page() -> rx.Component:
                 spacing="3",
                 wrap="wrap",
             ),
-            rx.text(f"Last Task ID: {TuneState.last_task_id}"),
-            rx.cond(TuneState.busy_message != "", rx.text(TuneState.busy_message)),
             title="Actions",
+            description="プレビュー更新とチューニングジョブ投入の主要操作をここに集約します。",
         ),
         section_card(
             rx.vstack(
@@ -77,19 +76,22 @@ def tune_page() -> rx.Component:
                 align="start",
             ),
             title="Tuning Settings",
+            description="対象モデル、モード、ベーススケール、ベクトル上書きを編集します。",
         ),
         section_card(
-            rx.text_area(
-                value=TuneState.preview_json,
-                read_only=True,
-                min_height="24rem",
-                width="100%",
-            ),
+            log_panel(TuneState.preview_json, min_height="24rem"),
             title="Config Preview",
+            description="チューニング設定の最終 JSON を確認します。",
         ),
         current_route="/tune",
         description="Arthemy Tuner の主要パラメータを編集し、キュー投入前に設定内容を確認できます。",
         feedback_message=TuneState.status_message,
         feedback_variant=TuneState.status_variant,
+        busy_message=TuneState.busy_message,
+        header_actions=rx.text(
+            f"Last Task ID: {TuneState.last_task_id}",
+            color="#6a5b4d",
+            size="2",
+        ),
         on_mount=TuneState.load_page,
     )

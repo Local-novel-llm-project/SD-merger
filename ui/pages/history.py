@@ -2,32 +2,26 @@ from __future__ import annotations
 
 import reflex as rx
 
-from ui.pages.common import page_shell, section_card
+from ui.pages.common import log_panel, meta_badge, page_shell, record_row, section_card
 from ui.state.history_state import HISTORY_YAML_UPLOAD_ID, HistoryState
 
 
 def _history_row(row: dict[str, str]) -> rx.Component:
-    return rx.vstack(
-        rx.hstack(
-            rx.text(row["date"]),
-            rx.code(row["output_name"]),
-            rx.text(row["status"]),
-            rx.button(
-                "Load",
-                size="1",
-                variant="soft",
-                on_click=HistoryState.select_history_entry(row["output_name"]),
-            ),
-            spacing="3",
-            width="100%",
+    return record_row(
+        row["output_name"],
+        status=row["status"],
+        subtitle=f"{row['model_a']}  <-  {row['model_b']}",
+        meta=[
+            meta_badge(row["date"]),
+            meta_badge(f"Strategy: {row['strategy']}"),
+            meta_badge(f"Velocity: {row['velocity']} / LRV: {row['left_right_velocity']}"),
+        ],
+        action=rx.button(
+            "Load",
+            size="1",
+            variant="soft",
+            on_click=HistoryState.select_history_entry(row["output_name"]),
         ),
-        rx.text(f"{row['model_a']}  <-  {row['model_b']}"),
-        rx.text(
-            f"Strategy: {row['strategy']} / Velocity: {row['velocity']} / LRV: {row['left_right_velocity']}"
-        ),
-        rx.divider(),
-        width="100%",
-        align="start",
     )
 
 
@@ -133,39 +127,56 @@ def history_page() -> rx.Component:
                 width="100%",
                 wrap="wrap",
             ),
-            rx.cond(HistoryState.busy_message != "", rx.text(HistoryState.busy_message)),
             title="History Controls",
+            description="履歴の選択、YAML の import/export、再投入操作をまとめています。",
         ),
         section_card(
             rx.vstack(
                 rx.foreach(HistoryState.history_rows, _history_row),
                 width="100%",
                 align="start",
+                spacing="3",
             ),
             title="History Entries",
+            description="保存済みレシピを状態付きで一覧表示します。",
         ),
         section_card(
-            rx.text_area(
-                value=HistoryState.yaml_preview,
-                read_only=True,
-                min_height="12rem",
-                width="100%",
-            ),
+            log_panel(HistoryState.yaml_preview, min_height="12rem"),
             title="Recipe Preview",
+            description="選択中レシピの読み取り専用プレビューです。",
         ),
         section_card(
-            rx.text_area(
-                value=HistoryState.yaml_editor_text,
-                on_change=HistoryState.set_yaml_editor_text,
-                disabled=HistoryState.busy,
-                min_height="24rem",
+            rx.box(
+                log_panel(
+                    HistoryState.yaml_editor_text,
+                    min_height="24rem",
+                    read_only=False,
+                    on_change=HistoryState.set_yaml_editor_text,
+                ),
                 width="100%",
+                opacity=rx.cond(HistoryState.busy, "0.75", "1"),
             ),
             title="Editable YAML",
+            description="履歴や import から読み込んだ YAML を直接編集します。",
         ),
         current_route="/history",
         description="実行履歴を参照し、保存済み YAML の確認、編集、再投入を行います。",
         feedback_message=HistoryState.status_message,
         feedback_variant=HistoryState.status_variant,
+        busy_message=HistoryState.busy_message,
+        header_actions=rx.vstack(
+            rx.text(
+                f"Source: {HistoryState.yaml_source_label}",
+                color="#6a5b4d",
+                size="2",
+            ),
+            rx.text(
+                f"Selected: {HistoryState.selected_output_name}",
+                color="#6a5b4d",
+                size="2",
+            ),
+            spacing="1",
+            align="end",
+        ),
         on_mount=HistoryState.load_page,
     )
