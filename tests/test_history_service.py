@@ -1,6 +1,7 @@
 import pytest
 
-import ui.services.history_service as history_service
+import module.services.history as history_service
+import ui.services.history_service as ui_history_service
 
 
 def test_build_history_rows_handles_target_only_entries(monkeypatch):
@@ -274,3 +275,12 @@ def test_import_recipe_yaml_rejects_non_mapping():
         assert "mapping" in str(exc)
     else:
         raise AssertionError("ValueError was not raised")
+
+
+def test_ui_history_service_reexports_module_history_service():
+    assert ui_history_service.build_history_rows is history_service.build_history_rows
+    assert ui_history_service.queue_history_yaml is history_service.queue_history_yaml
+    assert (
+        ui_history_service.export_history_entry_to_path
+        is history_service.export_history_entry_to_path
+    )

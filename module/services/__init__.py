@@ -1,1 +1,53 @@
 """Domain-level service APIs."""
+
+from .history import (
+    build_history_rows,
+    build_history_yaml,
+    build_yaml_download_payload,
+    export_history_entry_to_path,
+    export_history_recipe,
+    export_yaml_to_path,
+    find_history_entry,
+    get_history_entry,
+    import_recipe_yaml,
+    load_yaml_from_path,
+    parse_history_yaml_text,
+    queue_history_yaml,
+    rerun_history_entry,
+    resolve_output_name,
+)
+from .queue import (
+    build_queue_rows,
+    build_queue_snapshot,
+    clear_completed,
+    get_queue_task,
+    is_paused,
+    pause_queue,
+    remove_task,
+    resume_queue,
+)
+
+__all__ = [
+    "build_history_rows",
+    "build_history_yaml",
+    "build_queue_rows",
+    "build_queue_snapshot",
+    "build_yaml_download_payload",
+    "clear_completed",
+    "export_history_entry_to_path",
+    "export_history_recipe",
+    "export_yaml_to_path",
+    "find_history_entry",
+    "get_history_entry",
+    "get_queue_task",
+    "import_recipe_yaml",
+    "is_paused",
+    "load_yaml_from_path",
+    "parse_history_yaml_text",
+    "pause_queue",
+    "queue_history_yaml",
+    "remove_task",
+    "rerun_history_entry",
+    "resolve_output_name",
+    "resume_queue",
+]
