@@ -4,6 +4,7 @@ import torch
 from torch import Tensor
 from sd_mecha import merge_method, Parameter, Return
 from module.extension_manager import register_strategy, register_pre_config_hook
+from module.services.mbw_each import build_mbw_each_config
 
 # --- MBW Each (個別重み) ストラテジー ---
 # 1つの辞書 (JSON文字列) に各ブロックパターンの A用/B用の比率を含め、
@@ -63,45 +64,11 @@ def mbw_each_pre_config_hook(config: dict) -> dict:
         mbw_a: "1,0.5,0.5,..." # 26 or 20 要素
         mbw_b: "0,0.5,0.5,..." # 26 or 20 要素
     """
-    from extensions.supermerger_mbw import _SD15_KEYWORDS, _SDXL_KEYWORDS
-
-    models = config.get("models", [])
-    for model_entry in models:
-        mbw_a_str = model_entry.get("mbw_a", "")
-        mbw_b_str = model_entry.get("mbw_b", "")
-
-        # mbw_a / mbw_b の指定がある場合のみ、ブロックごとの重み(key_patterns)を生成する
-        if mbw_a_str and mbw_b_str:
-            try:
-                ratios_a = [float(r.strip()) for r in mbw_a_str.split(",")]
-                ratios_b = [float(r.strip()) for r in mbw_b_str.split(",")]
-            except ValueError:
-                logging.error("MBW Each パースエラー。数値とカンマのみを使用してください。")
-                continue
-
-            if len(ratios_a) != len(ratios_b):
-                logging.error("mbw_a と mbw_b の要素数が一致しません。")
-                continue
-
-            if len(ratios_a) == 26:
-                keywords = _SD15_KEYWORDS
-            elif len(ratios_a) == 20:
-                keywords = _SDXL_KEYWORDS
-            else:
-                logging.error(f"MBW Each: ブロック数が 26 または 20 ではありません (現在: {len(ratios_a)})")
-                continue
-
-            rules = {}
-            for i, (ratio_a, ratio_b, pattern) in enumerate(zip(ratios_a, ratios_b, keywords)):
-                rules[f"block_{i}"] = {"pattern": pattern, "a": ratio_a, "b": ratio_b}
-
-            model_entry["key_patterns"] = rules  # mbw_each戦略側でJSONデコードして使用する
-
-            # クリーンアップ
-            model_entry.pop("mbw_a", None)
-            model_entry.pop("mbw_b", None)
-
-    return config
+    try:
+        return build_mbw_each_config(config)
+    except ValueError as exc:
+        logging.error(f"MBW Each パースエラー: {exc}")
+        return config
 
 
 def setup():

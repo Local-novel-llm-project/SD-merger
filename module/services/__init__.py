@@ -1,5 +1,16 @@
 """Domain-level service APIs."""
 
+from .ab_test import AbTestResult, AbTestRunResult, build_ab_test_configs, run_ab_test
+from .generation import (
+    ArtifactDTO,
+    GenerationRequest,
+    GenerationResult,
+    build_history_image_update,
+    create_plot_artifact,
+    generate_and_collect_artifacts,
+    resolve_generation_seed,
+    save_image_artifacts,
+)
 from .history import (
     build_history_rows,
     build_history_yaml,
@@ -16,6 +27,18 @@ from .history import (
     rerun_history_entry,
     resolve_output_name,
 )
+from .mbw_each import (
+    CurveWeightsResult,
+    SD15_KEYWORDS,
+    SDXL_KEYWORDS,
+    build_curve_weights,
+    build_key_pattern_rules,
+    build_mbw_each_config,
+    build_mbw_each_model_config,
+    format_mbw_values,
+    parse_ratio_string,
+    resolve_block_keywords,
+)
 from .queue import (
     build_queue_rows,
     build_queue_snapshot,
@@ -28,16 +51,33 @@ from .queue import (
 )
 
 __all__ = [
+    "AbTestResult",
+    "AbTestRunResult",
+    "ArtifactDTO",
+    "CurveWeightsResult",
+    "GenerationRequest",
+    "GenerationResult",
+    "SD15_KEYWORDS",
+    "SDXL_KEYWORDS",
+    "build_ab_test_configs",
+    "build_curve_weights",
     "build_history_rows",
     "build_history_yaml",
+    "build_history_image_update",
+    "build_key_pattern_rules",
+    "build_mbw_each_config",
+    "build_mbw_each_model_config",
     "build_queue_rows",
     "build_queue_snapshot",
     "build_yaml_download_payload",
     "clear_completed",
+    "create_plot_artifact",
     "export_history_entry_to_path",
     "export_history_recipe",
     "export_yaml_to_path",
     "find_history_entry",
+    "format_mbw_values",
+    "generate_and_collect_artifacts",
     "get_history_entry",
     "get_queue_task",
     "import_recipe_yaml",
@@ -45,9 +85,14 @@ __all__ = [
     "load_yaml_from_path",
     "parse_history_yaml_text",
     "pause_queue",
+    "parse_ratio_string",
     "queue_history_yaml",
     "remove_task",
+    "resolve_block_keywords",
+    "resolve_generation_seed",
     "rerun_history_entry",
     "resolve_output_name",
     "resume_queue",
+    "run_ab_test",
+    "save_image_artifacts",
 ]
