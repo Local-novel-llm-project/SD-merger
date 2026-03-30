@@ -2,19 +2,11 @@ import os
 
 from extensions.auto_generate import auto_generate_hook
 import extensions.auto_generate as auto_generate
-
-
-class _FakeImage:
-    def __init__(self):
-        self.saved_paths = []
-
-    def save(self, path):
-        self.saved_paths.append(path)
+from module.services.generation import ArtifactDTO, GenerationResult
 
 
 def test_auto_generate_hook_updates_history_with_output_path(monkeypatch):
     captured = {}
-    fake_image = _FakeImage()
 
     monkeypatch.setattr(
         auto_generate,
@@ -32,7 +24,26 @@ def test_auto_generate_hook_updates_history_with_output_path(monkeypatch):
             "seed": 1,
         },
     )
-    monkeypatch.setattr(auto_generate, "generate_image", lambda **kwargs: [fake_image])
+    monkeypatch.setattr(
+        auto_generate,
+        "generate_and_collect_artifacts",
+        lambda request: GenerationResult(
+            seed=1,
+            artifacts=(
+                ArtifactDTO(
+                    kind="image",
+                    path=os.path.join("models", "output", "nested", "model_sample.png"),
+                    label="Generated 1",
+                ),
+            ),
+            preview=ArtifactDTO(
+                kind="image",
+                path=os.path.join("models", "output", "nested", "model_sample.png"),
+                label="Generated 1",
+            ),
+            images=(),
+        ),
+    )
 
     def fake_update_history_entry(output_name, update_dict):
         captured["output_name"] = output_name
@@ -49,4 +60,3 @@ def test_auto_generate_hook_updates_history_with_output_path(monkeypatch):
     assert captured["update_dict"]["generated_images"] == [
         captured["update_dict"]["preview_image"]
     ]
-    assert fake_image.saved_paths == captured["update_dict"]["generated_images"]

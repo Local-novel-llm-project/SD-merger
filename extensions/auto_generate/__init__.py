@@ -1,11 +1,13 @@
 import os
-import time
 import logging
-from PIL import Image
 
 from module.extension_manager import register_post_merge_hook
-from module.generation import generate_image
 from module.history import update_history_entry
+from module.services.generation import (
+    GenerationRequest,
+    build_history_image_update,
+    generate_and_collect_artifacts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,44 +47,33 @@ def auto_generate_hook(config_dict: dict, output_path: str):
     scheduler = auto_generate_config.get("scheduler", "normal")
     seed = auto_generate_config.get("seed", -1)
 
-    import random
-
-    actual_seed = seed if seed > 0 else random.randint(1, 1125899906842624)
-
-    # 複数枚生成をサポートしているため画像のリストが返る
-    images = generate_image(
-        model_path=output_path,
-        prompt=prompt,
-        negative_prompt=neg_prompt,
-        width=w,
-        height=h,
-        steps=steps,
-        cfg=cfg,
-        sampler_name=sampler_name,
-        scheduler=scheduler,
-        seed=actual_seed,
+    result = generate_and_collect_artifacts(
+        GenerationRequest(
+            model_path=output_path,
+            output_dir=os.path.dirname(output_path),
+            output_prefix=f"{os.path.splitext(os.path.basename(output_path))[0]}_sample",
+            prompt=prompt,
+            negative_prompt=neg_prompt,
+            width=w,
+            height=h,
+            steps=steps,
+            cfg=cfg,
+            sampler_name=sampler_name,
+            scheduler=scheduler,
+            seed=seed,
+        )
     )
 
-    if not images:
+    if not result.artifacts:
         logger.error("自動生成に失敗しました。")
         return
 
-    output_dir = os.path.dirname(output_path)
-    base_name = os.path.splitext(os.path.basename(output_path))[0]
-    generated_image_paths = []
-
-    # 画像の保存
-    for i, img in enumerate(images):
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        img_filename = f"{base_name}_sample_{timestamp}_{i}.png"
-        img_path = os.path.join(output_dir, img_filename)
-        img.save(img_path)
-        logger.info(f"自動生成画像を保存しました: {img_path}")
-        generated_image_paths.append(img_path)
+    for artifact in result.artifacts:
+        logger.info(f"自動生成画像を保存しました: {artifact.path}")
 
     # 最初の生成画像をヒストリのプレビュー用に登録する
-    if generated_image_paths:
-        update_dict = {"preview_image": generated_image_paths[0], "generated_images": generated_image_paths}
+    update_dict = build_history_image_update(result)
+    if update_dict:
         success = update_history_entry(output_path, update_dict)
         if success:
             logger.info(f"ヒストリエントリの画像を更新しました: {output_path}")
