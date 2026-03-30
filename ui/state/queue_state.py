@@ -5,7 +5,6 @@ from datetime import datetime
 
 import reflex as rx
 
-from ui.services.app_boot import ensure_app_ready
 from ui.services.queue_service import (
     build_queue_snapshot,
     clear_completed,
@@ -14,25 +13,21 @@ from ui.services.queue_service import (
     remove_task,
     resume_queue,
 )
+from ui.state.base import BasePageState
 
 
-class QueueState(rx.State):
+class QueueState(BasePageState):
     queue_rows: list[dict[str, str]] = []
     queue_paused: bool = False
     selected_task_id: str = ""
-    status_message: str = ""
-    status_variant: str = "info"
     task_count: int = 0
     last_updated_at: str = ""
-    polling_enabled: bool = False
-    polling_generation: int = 0
+    poll_route: str = "/queue"
 
     def load_page(self) -> None:
-        ensure_app_ready()
-        self.polling_enabled = True
-        self.polling_generation += 1
+        self.ensure_ready()
         self.refresh()
-        return QueueState.poll_queue(self.polling_generation)
+        return self.start_polling()
 
     def set_selected_task_id(self, value: str) -> None:
         self.selected_task_id = value
@@ -64,45 +59,44 @@ class QueueState(rx.State):
         self._refresh_snapshot()
 
     def pause(self) -> None:
-        _, message = pause_queue()
-        self.status_message = message
-        self.status_variant = "info"
-        self.refresh()
+        self.begin_busy("キューを一時停止しています。")
+        try:
+            _, message = pause_queue()
+            self.refresh()
+            self.end_busy(message, variant="info")
+        except Exception as exc:
+            self.fail_busy(exc, action="キューの一時停止")
 
     def resume(self) -> None:
-        _, message = resume_queue()
-        self.status_message = message
-        self.status_variant = "success"
-        self.refresh()
+        self.begin_busy("キューを再開しています。")
+        try:
+            _, message = resume_queue()
+            self.refresh()
+            self.end_busy(message)
+        except Exception as exc:
+            self.fail_busy(exc, action="キューの再開")
 
     def clear_completed_items(self) -> None:
-        _, message = clear_completed()
-        self.status_message = message
-        self.status_variant = "success"
-        self.refresh()
+        self.begin_busy("完了済みタスクを整理しています。")
+        try:
+            _, message = clear_completed()
+            self.refresh()
+            self.end_busy(message)
+        except Exception as exc:
+            self.fail_busy(exc, action="完了済みタスクの削除")
 
     def remove_selected_task(self) -> None:
         if not self.selected_task_id.strip():
-            self.status_message = "Task ID を入力してください。"
-            self.status_variant = "error"
+            self.set_status("Task ID を入力してください。", "error")
             return
 
-        ok, message = remove_task(self.selected_task_id.strip())
-        self.status_message = message
-        self.status_variant = "success" if ok else "error"
-        self.refresh()
+        self.begin_busy("タスクを削除しています。")
+        try:
+            ok, message = remove_task(self.selected_task_id.strip())
+            self.refresh()
+            self.end_busy(message, variant="success" if ok else "error")
+        except Exception as exc:
+            self.fail_busy(exc, action="タスクの削除")
 
-    @rx.event(background=True)
-    async def poll_queue(self, generation: int) -> None:
-        while True:
-            async with self:
-                current_path = getattr(self.router.page, "path", "")
-                if (
-                    not self.polling_enabled
-                    or self.polling_generation != generation
-                    or current_path != "/queue"
-                ):
-                    self.polling_enabled = False
-                    break
-                self._refresh_snapshot()
-            await asyncio.sleep(2)
+    def _poll_tick(self) -> None:
+        self._refresh_snapshot()

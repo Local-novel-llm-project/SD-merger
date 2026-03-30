@@ -10,13 +10,12 @@ from module.services.merge import (
     build_merge_preview,
     build_preview_json,
     create_default_output_name,
-    list_models,
     queue_merge,
 )
-from ui.services.app_boot import ensure_app_ready
+from ui.state.base import BasePageState
 
 
-class MergeState(rx.State):
+class MergeState(BasePageState):
     available_models: list[str] = []
     merge_strategies: list[str] = MERGE_STRATEGIES
     target_strategies: list[str] = TARGET_STRATEGIES
@@ -42,27 +41,19 @@ class MergeState(rx.State):
     output_name_locked: bool = False
 
     def load_page(self) -> None:
-        ensure_app_ready()
+        self.ensure_ready()
         self.refresh_models()
         self.refresh_preview()
 
-    def refresh_models(self) -> None:
-        try:
-            self.available_models = list_models()
-            if self.model_a and self.model_a not in self.available_models:
-                self.model_a = ""
-            if self.model_b and self.model_b not in self.available_models:
-                self.model_b = ""
-            if self.model_c not in {"", "選択しない"} and self.model_c not in self.available_models:
-                self.model_c = "選択しない"
-            if self.bake_in_vae and self.bake_in_vae not in self.available_models:
-                self.bake_in_vae = ""
-            self.status_message = f"Loaded {len(self.available_models)} models."
-            self.status_variant = "info"
-        except Exception as exc:
-            self.available_models = []
-            self.status_message = str(exc)
-            self.status_variant = "error"
+    def _reconcile_model_selection(self) -> None:
+        if self.model_a and self.model_a not in self.available_models:
+            self.model_a = ""
+        if self.model_b and self.model_b not in self.available_models:
+            self.model_b = ""
+        if self.model_c not in {"", "選択しない"} and self.model_c not in self.available_models:
+            self.model_c = "選択しない"
+        if self.bake_in_vae and self.bake_in_vae not in self.available_models:
+            self.bake_in_vae = ""
 
     def set_model_a_value(self, value: str) -> None:
         self.model_a = value
@@ -138,6 +129,7 @@ class MergeState(rx.State):
         )
 
     def queue_current_merge(self) -> None:
+        self.begin_busy("マージ設定をキューに追加しています。")
         try:
             config, output_name = build_basic_merge_config(
                 self.model_a,
@@ -154,9 +146,7 @@ class MergeState(rx.State):
                 self.lazy_load,
             )
             self.last_task_id = queue_merge(config, output_name)
-            self.status_message = f"Queued merge task: {self.last_task_id}"
-            self.status_variant = "success"
             self.preview_json = build_preview_json(config)
+            self.end_busy(f"Queued merge task: {self.last_task_id}")
         except Exception as exc:
-            self.status_message = str(exc)
-            self.status_variant = "error"
+            self.fail_busy(exc, action="マージのキュー投入")

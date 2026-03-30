@@ -4,8 +4,7 @@ import json
 
 import reflex as rx
 
-from ui.services.app_boot import ensure_app_ready
-from ui.services.model_service import list_models
+from ui.state.base import BasePageState
 from ui.services.tuning_service import (
     build_tuning_config,
     build_tuning_preview,
@@ -15,8 +14,7 @@ from ui.services.tuning_service import (
 )
 
 
-class TuneState(rx.State):
-    available_models: list[str] = []
+class TuneState(BasePageState):
     modes: list[str] = list_modes()
 
     target_model: str = ""
@@ -27,14 +25,16 @@ class TuneState(rx.State):
     output_name: str = "arthemy_tuned.safetensors"
 
     preview_json: str = "{}"
-    status_message: str = ""
-    status_variant: str = "info"
     last_task_id: str = ""
 
     def load_page(self) -> None:
-        ensure_app_ready()
-        self.available_models = list_models()
+        self.ensure_ready()
+        self.refresh_models()
         self.refresh_preview()
+
+    def _reconcile_model_selection(self) -> None:
+        if self.target_model and self.target_model not in self.available_models:
+            self.target_model = ""
 
     def set_target_model_value(self, value: str) -> None:
         self.target_model = value
@@ -71,15 +71,18 @@ class TuneState(rx.State):
         )
 
     def queue_tuning_job(self) -> None:
-        config, output_name = build_tuning_config(
-            self.target_model,
-            self.mode,
-            parse_optional_float(self.clip_base_scale),
-            parse_optional_float(self.unet_base_scale),
-            self.vectors_override,
-            self.output_name,
-        )
-        self.last_task_id = queue_tuning(config, output_name)
-        self.status_message = f"Queued Arthemy Tuning task: {self.last_task_id}"
-        self.status_variant = "success"
-        self.preview_json = json.dumps(config, indent=2, ensure_ascii=False)
+        self.begin_busy("Arthemy Tuning をキューに追加しています。")
+        try:
+            config, output_name = build_tuning_config(
+                self.target_model,
+                self.mode,
+                parse_optional_float(self.clip_base_scale),
+                parse_optional_float(self.unet_base_scale),
+                self.vectors_override,
+                self.output_name,
+            )
+            self.last_task_id = queue_tuning(config, output_name)
+            self.preview_json = json.dumps(config, indent=2, ensure_ascii=False)
+            self.end_busy(f"Queued Arthemy Tuning task: {self.last_task_id}")
+        except Exception as exc:
+            self.fail_busy(exc, action="Arthemy Tuning のキュー投入")

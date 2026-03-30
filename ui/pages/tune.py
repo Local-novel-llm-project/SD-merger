@@ -12,12 +12,22 @@ def tune_page() -> rx.Component:
         section_card(
             rx.text("Reflex UI では主要パラメータを services/state 経由で組み立ててキュー投入します。"),
             rx.hstack(
-                rx.button("Refresh Preview", on_click=TuneState.refresh_preview),
-                rx.button("Queue Tuning", on_click=TuneState.queue_tuning_job),
+                rx.button(
+                    "Refresh Preview",
+                    on_click=TuneState.refresh_preview,
+                    disabled=TuneState.busy,
+                ),
+                rx.button(
+                    "Queue Tuning",
+                    on_click=TuneState.queue_tuning_job,
+                    disabled=TuneState.busy,
+                    loading=TuneState.busy,
+                ),
                 spacing="3",
                 wrap="wrap",
             ),
             rx.text(f"Last Task ID: {TuneState.last_task_id}"),
+            rx.cond(TuneState.busy_message != "", rx.text(TuneState.busy_message)),
             title="Actions",
         ),
         section_card(
