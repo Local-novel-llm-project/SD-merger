@@ -32,6 +32,7 @@ def test_app_theme_has_expected_tokens(monkeypatch):
     assert theme_module.APP_THEME["accent_color"] == "amber"
     assert theme_module.APP_THEME["radius"] == "large"
     assert theme_module.APP_THEME["scaling"] == "105%"
+    assert "panel_background" not in theme_module.APP_THEME
     assert theme_module.THEME_TOKENS["accent"] == "#b7791f"
     assert theme_module.THEME_TOKENS["content_width"] == "1360px"
 

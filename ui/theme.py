@@ -57,7 +57,6 @@ APP_THEME = {
     "radius": "large",
     "scaling": "105%",
     "has_background": True,
-    "panel_background": THEME_TOKENS["panel_background"],
 }
 
 
