@@ -12,13 +12,28 @@ def merge_page() -> rx.Component:
         section_card(
             rx.text("Reflex ベースのメインマージ画面です。主要な設定を queue ベースで実行します。"),
             rx.hstack(
-                rx.button("Refresh Models", on_click=MergeState.refresh_models),
-                rx.button("Refresh Preview", on_click=MergeState.refresh_preview),
-                rx.button("Queue Merge", on_click=MergeState.queue_current_merge),
+                rx.button(
+                    "Refresh Models",
+                    on_click=MergeState.refresh_models,
+                    disabled=MergeState.busy,
+                    loading=MergeState.busy,
+                ),
+                rx.button(
+                    "Refresh Preview",
+                    on_click=MergeState.refresh_preview,
+                    disabled=MergeState.busy,
+                ),
+                rx.button(
+                    "Queue Merge",
+                    on_click=MergeState.queue_current_merge,
+                    disabled=MergeState.busy,
+                    loading=MergeState.busy,
+                ),
                 spacing="3",
                 wrap="wrap",
             ),
             rx.text(f"Last Task ID: {MergeState.last_task_id}"),
+            rx.cond(MergeState.busy_message != "", rx.text(MergeState.busy_message)),
             title="Actions",
         ),
         section_card(
