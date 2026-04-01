@@ -63,6 +63,42 @@ def test_build_basic_merge_config_includes_optional_fields(monkeypatch):
     assert output_name == "merged.safetensors"
 
 
+def test_build_basic_merge_config_omits_advanced_fields_when_disabled(monkeypatch):
+    monkeypatch.setattr(
+        config_builder,
+        "resolve_model_path",
+        lambda name: f"/models/{name}" if name else None,
+    )
+    monkeypatch.setattr(
+        config_builder,
+        "create_default_output_name",
+        lambda model_a, model_b: f"{model_a}-{model_b}-auto.safetensors",
+    )
+
+    config, output_name = config_builder.build_basic_merge_config(
+        "ModelA",
+        "ModelB",
+        "ModelC",
+        "subtraction",
+        "addition",
+        0.25,
+        "0.8",
+        False,
+        "1,1,1",
+        "vae.safetensors",
+        "merged.safetensors",
+        False,
+    )
+
+    assert config["target_model"] == "/models/ModelC"
+    assert "left_right_velocity" not in config["models"][0]
+    assert "mbw" not in config["models"][0]
+    assert "bake_in_vae" not in config
+    assert "output_name" not in config
+    assert config["lazy_load"] is False
+    assert output_name == "ModelA-ModelB-auto.safetensors"
+
+
 def test_build_merge_preview_returns_hint_when_models_missing():
     preview = config_builder.build_merge_preview(
         "",
