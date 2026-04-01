@@ -116,11 +116,13 @@ def build_basic_merge_config(
         if vae_path:
             config["bake_in_vae"] = vae_path
 
-    resolved_output_name = (output_name or "").strip() or create_default_output_name(
-        model_a,
-        model_b,
+    explicit_output_name = (output_name or "").strip()
+    resolved_output_name = (
+        explicit_output_name
+        if use_advanced_options and explicit_output_name
+        else create_default_output_name(model_a, model_b)
     )
-    if (output_name or "").strip():
+    if use_advanced_options and explicit_output_name:
         config["output_name"] = resolved_output_name
 
     return config, resolved_output_name

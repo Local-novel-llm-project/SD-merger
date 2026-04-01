@@ -179,3 +179,63 @@ def test_history_state_download_uses_shared_download_helper(monkeypatch):
     assert result == {"type": "download", "data": "models: []\n", "filename": "merged.yaml"}
     assert state.status_variant == "info"
     assert state.status_message == "Downloading YAML: merged.yaml"
+
+
+def test_merge_state_updates_output_name_until_user_overrides(monkeypatch):
+    _install_fake_reflex(monkeypatch)
+    modules = _reload_state_modules()
+    merge_module = modules["merge"]
+
+    monkeypatch.setattr(merge_module, "create_default_output_name", lambda a, b: f"{a}+{b}")
+    monkeypatch.setattr(merge_module, "build_merge_preview", lambda *args: "{\"preview\": true}")
+
+    state = merge_module.MergeState()
+
+    state.set_model_a_value("ModelA")
+    state.set_model_b_value("ModelB")
+    assert state.output_name == "ModelA+ModelB"
+    assert state.preview_json == "{\"preview\": true}"
+
+    state.set_output_name_value("custom-name")
+    state.set_model_a_value("ModelA2")
+    assert state.output_name == "custom-name"
+
+
+def test_merge_state_queue_current_merge_uses_strategy_task_name(monkeypatch):
+    _install_fake_reflex(monkeypatch)
+    modules = _reload_state_modules()
+    merge_module = modules["merge"]
+
+    captured = {}
+
+    monkeypatch.setattr(
+        merge_module,
+        "build_basic_merge_config",
+        lambda *args: ({"models": [{"strategy": "mix"}]}, "merged.safetensors"),
+    )
+    monkeypatch.setattr(
+        merge_module,
+        "queue_merge",
+        lambda config, output_name, task_name=None: captured.update(
+            {
+                "config": config,
+                "output_name": output_name,
+                "task_name": task_name,
+            }
+        )
+        or "task-123",
+    )
+    monkeypatch.setattr(merge_module, "build_preview_json", lambda config: "{\"queued\": true}")
+
+    state = merge_module.MergeState()
+    state.strategy = "tensor"
+    state.velocity = "0.5"
+
+    state.queue_current_merge()
+
+    assert captured["config"] == {"models": [{"strategy": "mix"}]}
+    assert captured["output_name"] == "merged.safetensors"
+    assert captured["task_name"] == "Merge: tensor"
+    assert state.last_task_id == "task-123"
+    assert state.preview_json == "{\"queued\": true}"
+    assert state.status_variant == "success"

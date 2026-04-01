@@ -145,7 +145,11 @@ class MergeState(BasePageState):
                 self.output_name,
                 self.lazy_load,
             )
-            self.last_task_id = queue_merge(config, output_name)
+            self.last_task_id = queue_merge(
+                config,
+                output_name,
+                task_name=f"Merge: {self.strategy}",
+            )
             self.preview_json = build_preview_json(config)
             self.end_busy(f"Queued merge task: {self.last_task_id}")
         except Exception as exc:
